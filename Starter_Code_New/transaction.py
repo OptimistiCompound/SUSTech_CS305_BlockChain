@@ -43,32 +43,39 @@ class TransactionMessage:
             amount=data["amount"],
             timestamp=data["timestamp"]
         )
-    
-tx_pool = [] # local transaction pool
-tx_ids = set() # the set of IDs of transactions in the local pool
-    
+
+# 本地交易池及其ID集合
+tx_pool = []
+tx_ids = set()
+
 def transaction_generation(self_id, interval=15):
     def loop():
-        # TODO: Randomly choose a peer from `known_peers` and generate a transaction to transfer arbitrary amount of money to the peer.
-
-        # TODO:  Add the transaction to local `tx_pool` using the function `add_transaction`.
-
-        # TODO:  Broadcast the transaction to `known_peers` using the function `gossip_message` in `outbox.py`.
-
-        pass
+        while True:
+            # 随机选择一个已知节点（排除自己）
+            candidates = [peer for peer in known_peers if peer != self_id]
+            if not candidates:
+                time.sleep(interval)
+                continue
+            to_peer = random.choice(candidates)
+            amount = random.randint(1, 100)  # 随机金额
+            tx = TransactionMessage(self_id, to_peer, amount)
+            add_transaction(tx)  # 加入本地交易池
+            # 广播交易到所有已知节点
+            gossip_message(tx.to_dict(), [peer for peer in known_peers if peer != self_id])
+            time.sleep(interval)
     threading.Thread(target=loop, daemon=True).start()
 
 def add_transaction(tx):
-    # TODO: Add a transaction to the local `tx_pool` if it is in the pool.
-
-    # TODO: Add the transaction ID to `tx_ids`.
-    pass
+    # 检查是否已存在
+    if tx.id not in tx_ids:
+        tx_pool.append(tx)
+        tx_ids.add(tx.id)
 
 def get_recent_transactions():
-    # TODO: Return all transactions in the local `tx_pool`.
-    pass
+    # 返回所有交易（字典形式便于序列化和展示）
+    return [tx.to_dict() for tx in tx_pool]
 
 def clear_pool():
-    # Remove all transactions in `tx_pool` and transaction IDs in `tx_ids`.
-
-    pass
+    # 清空交易池和ID集合
+    tx_pool.clear()
+    tx_ids.clear()
