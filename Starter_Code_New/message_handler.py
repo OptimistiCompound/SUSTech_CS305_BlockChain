@@ -8,7 +8,7 @@ from peer_discovery import handle_hello_message, known_peers, peer_config
 from block_handler import handle_block, get_block_by_id, create_getblock, received_blocks, header_store
 from inv_message import  create_inv, get_inventory
 from block_handler import create_getblock
-from peer_manager import  update_peer_heartbeat, record_offense, create_pong, handle_pong
+from peer_manager import  update_peer_heartbeat, record_offense, create_pong, handle_pong, blacklist
 from transaction import add_transaction
 from outbox import enqueue_message, gossip_message
 
@@ -28,31 +28,44 @@ INBOUND_RATE_LIMIT = 10
 INBOUND_TIME_WINDOW = 10  # seconds
 
 def is_inbound_limited(peer_id):
-    # TODO: Record the timestamp when receiving message from a sender.
-
-    # TODO: Check if the number of messages sent by the sender exceeds `INBOUND_RATE_LIMIT` during the `INBOUND_TIME_WINDOW`. If yes, return `TRUE`. If not, return `FALSE`.
-
-    pass
+    # Record the timestamp when receiving message from a sender.
+    cur_time = time.time()
+    peer_inbound_timestamps[peer_id].append(time.time())
+    # Check if the number of messages sent by the sender exceeds `INBOUND_RATE_LIMIT` during the `INBOUND_TIME_WINDOW`. If yes, return `TRUE`. If not, return `FALSE`.
+    limit_cnt = 0
+    for timestamp in peer_inbound_timestamps[peer_id]:
+        if (cur_time <= timestamp + INBOUND_TIME_WINDOW):
+            limit_cnt += 1
+        if (limit_cnt >= INBOUND_RATE_LIMIT):
+            return True
+    return False
 
 # ===  Redundancy Tracking ===
 
 def get_redundancy_stats():
-    # TODO: Return the times of receiving duplicated messages (`message_redundancy`).
-    pass
+    # Return the times of receiving duplicated messages (`message_redundancy`).
+    return message_redundancy
 
 # === Main Message Dispatcher ===
 def dispatch_message(msg, self_id, self_ip):
     
     msg_type = msg.get["type"]
+    msg_id = msg.get["id"]
 
-    # TODO: Read the message.
+    # Read the message.
 
-    # TODO: Check if the message has been seen in `seen_message_ids` to prevent replay attacks. If yes, drop the message and add one to `message_redundancy`. If not, add the message ID to `seen_message_ids`.
-
-    # TODO: Check if the sender sends message too frequently using the function `in_bound_limited`. If yes, drop the message.
-
-    # TODO: Check if the sender exists in the `blacklist` of `peer_manager.py`. If yes, drop the message.
-
+    # Check if the message has been seen in `seen_message_ids` to prevent replay attacks. If yes, drop the message and add one to `message_redundancy`. If not, add the message ID to `seen_message_ids`.
+    if msg_id in seen_message_ids:
+        message_redundancy += 1
+        return
+    else:
+        seen_message_ids[msg_id] = time.time()
+    # Check if the sender sends message too frequently using the function `is_inbound_limited`. If yes, drop the message.
+    if is_inbound_limited(msg["sender"]):
+        return
+    # Check if the sender exists in the `blacklist` of `peer_manager.py`. If yes, drop the message.
+    if msg["sender"] in blacklist:
+        return
 
     if msg_type == "RELAY":
 
@@ -62,8 +75,8 @@ def dispatch_message(msg, self_id, self_ip):
         pass
 
     elif msg_type == "HELLO":
-        # TODO: Call the function `handle_hello_message` in `peer_discovery.py` to process the message.
-        pass
+        # Call the function `handle_hello_message` in `peer_discovery.py` to process the message.
+        handle_hello_message(msg, self_id)
 
     elif msg_type == "BLOCK":
         # TODO: Check the correctness of block ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
