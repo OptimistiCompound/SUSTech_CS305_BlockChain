@@ -152,7 +152,7 @@ When receiving messages from other peers, the messages must be dispatched and pr
     * Check whether the block has been received. If yes, drop the block to prevent replay attacks.
     * Record the count of redundant blocks if they have been received.
     * Add the new block to the list of orphaned blocks if its previous block does not exist in the blockchain due to network delay.
-    * Add the new block to the local blockchain if its prevent block exists in the blockchain.
+    * Add the new block to the local blockchain if its previous block exists in the blockchain.
     * Check whether the new block is the previous block of the orphaned blocks.
     * Broadcast the new block to known peers.
       
@@ -185,6 +185,8 @@ Start a dashboard server to display the following message:
 * `Localhost: port/latency`: display the transmission latency between peers.
 * `Localhost: port/capacity`: display the sending capacity of the peers.
 * `Localhost: port/redundancy`: display the number of redundant messages received.
+* `Localhost: port/queue`: display the message in the outbox queue.
+* `Localhost: port/blacklist`: display the blacklist.
 
 -------
 
@@ -225,7 +227,7 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 
 1. `start_ping_loop`
 
-* Define the JSON format of a `ping` message, which should include `{message typy, sender's ID, timestamp}`.
+* Define the JSON format of a `ping` message, which should include `{message type, sender's ID, timestamp}`.
 
 * Send a `ping` message to each known peer periodically.
 
@@ -289,7 +291,7 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 
 * Define the JSON format of a `GET_BLOCK_HEADERS`, which should include `{message type, sender's ID}`.
 
-* Send a `GET_BLOCK_HEADERS` message to each known peer and put the messages in the outbox queue.
+* Send a `GET_BLOCK_HEADERS` message to each known peer (to obtain the list of block headers in the latest blockchain) and put the messages in the outbox queue.
 
 2. `block_generation`
 
@@ -303,11 +305,11 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 
 * Define the JSON format of a `block`, which should include `{message type, peer's ID, timestamp, block ID, previous block's ID, and transactions}`. The `block ID` is the hash value of the block structure, except for the item `block ID`. `previous block` is the last block in the blockchain, to which the new block will be linked. If the block generator is malicious, it can generate a random block ID.
 
-* Read the transactions in the local `tx_pool` using the function `get_recent_transactions` in `transaction.py`.
+* Read the transactions in the local `tx_pool` using the function `get_recent_transactions` in `transaction.py` before clearing the local transaction pool.
 
 * Create a new block with the transactions and generate the block ID using the function `compute_block_hash`.
      
-* Clear the local transaction pool and add the new block into the local blockchain (`receive_block`).
+* Add the new block into the local blockchain (`receive_block`).
 
 4. `compute_block_hash`
 
@@ -524,6 +526,10 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 * `capacity`: display the sending capacity of the peer.
   
 * `redundancy`: display the number of redundant messages received.
+
+* `queue`: display the message in the outbox queue.
+
+* `blacklist`: display the blacklist.
 
 ---------
 

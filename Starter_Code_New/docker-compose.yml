@@ -18,7 +18,7 @@ services:
     ports:
       - "6001:5001"
       - "8001:7001"
-    command: ["python", "node.py", "--id", "5001", "--config", "config.json"]
+    command: ["python", "node.py", "--id", "5001", "--config", "config.json", "--mode", "malicious"]
     networks:
       p2pnet:
         ipv4_address: 172.28.0.11
@@ -54,7 +54,7 @@ services:
     ports:
       - "6004:5004"    
       - "8004:7004"    
-    command: ["python", "node.py", "--id", "5004", "--config", "config.json"]
+    command: ["python", "node.py", "--id", "5004", "--config", "config.json", "--mode", "malicious"]
     networks:
       p2pnet:
         ipv4_address: 172.28.0.14
