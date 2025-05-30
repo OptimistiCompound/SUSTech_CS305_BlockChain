@@ -10,25 +10,56 @@ peer_config={}
 def start_peer_discovery(self_id, self_info):
     from outbox import enqueue_message
     def loop():
-        # TODO: Define the JSON format of a `hello` message, which should include: `{message type, sender’s ID, IP address, port, flags, and message ID}`. 
+        # Define the JSON format of a `hello` message, which should include: `{message type, sender’s ID, IP address, port, flags, and message ID}`. 
         # A `sender’s ID` can be `peer_port`. 
         # The `flags` should indicate whether the peer is `NATed or non-NATed`, and `full or lightweight`. 
         # The `message ID` can be a random number.
+        self_ip = self_info["ip"]
+        self_port = self_info["port"]
+        nat_status = self_info["nat"]
+        light_status = self_info["light"]
+        hello_msg = {
+            "message_type": "HELLO",
+            "sender_id": self_id,
+            "ip": self_ip,
+            "port": self_port,
+            "flags": {
+                "nat": nat_status,
+                "light": light_status
+            },
+            "message_id": generate_message_id()
+        }
+        # Send a `hello` message to all known peers and put the messages into the outbox queue.
+        for target_id in known_peers:
+            enqueue_message(target_id, self_ip, self_port, hello_msg)
 
-        # TODO: Send a `hello` message to all known peers and put the messages into the outbox queue.
-        pass
     threading.Thread(target=loop, daemon=True).start()
 
 def handle_hello_message(msg, self_id):
     new_peers = []
     
-    # TODO: Read information in the received `hello` message.
-     
-    # TODO: If the sender is unknown, add it to the list of known peers (`known_peer`) and record their flags (`peer_flags`).
-     
-    # TODO: Update the set of reachable peers (`reachable_by`).
+    # Read information in the received `hello` message.
+    sender_id = msg["sender_id"]
+    sender_ip = msg["ip"]
+    sender_port = msg["port"]
+    sender_nat, sender_light = msg["flags"]["nat"], msg["flags"]["light"]
 
-    pass
+    # If the sender is unknown, add it to the list of known peers (`known_peer`) and record their flags (`peer_flags`).
+    if sender_id not in known_peers:
+        known_peers[sender_id] = (sender_ip, sender_port)
+        peer_flags[sender_id] = {
+            "nat": sender_nat,
+            "light": sender_light
+        }
+        new_peers.append(sender_id)
+
+    # Update the set of reachable peers (`reachable_by`).
+    if sender_id not in reachable_by:
+        reachable_by[sender_id] = set()
+    if self_id not in reachable_by:
+        reachable_by[self_id] = set()
+    reachable_by[sender_id].add(self_id)
+    reachable_by[self_id].add(sender_id)    
 
     return new_peers 
 
