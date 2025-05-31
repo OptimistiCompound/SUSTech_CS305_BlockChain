@@ -16,8 +16,9 @@ def start_peer_discovery(self_id, self_info):
         # The `message ID` can be a random number.
         self_ip = self_info["ip"]
         self_port = self_info["port"]
-        nat_status = self_info["nat"]
-        light_status = self_info["light"]
+        nat_status = self_info.get("nat", False)
+        light_status = self_info.get("light", False)
+        localnetworkid = self_info.get("localnetworkid", -1)
         hello_msg = {
             "message_type": "HELLO",
             "sender_id": self_id,
@@ -27,13 +28,34 @@ def start_peer_discovery(self_id, self_info):
                 "nat": nat_status,
                 "light": light_status
             },
+            "localnetworkid": localnetworkid,
             "message_id": generate_message_id()
         }
 
-        # TODO: Send a `hello` message to all reachable peers and put the messages into the outbox queue.
+        # TODO：Send a `hello` message to all reachable peers and put the messages into the outbox queue.
         # Tips: A NATed peer can only say hello to peers in the same local network. 
         #       If a peer and a NATed peer are not in the same local network, they cannot say hello to each other.
-        for target_id in known_peers:
+        # 不完整的实现，尚不清楚localnetworkid的作用，以及如何判断rechable_by
+
+        # 初始化 reachable_by，把自己加进去
+        if self_id not in reachable_by:
+            reachable_by[self_id] = set()
+        # 寻找 reachable_by
+        for candidate_id, candidate_info in peer_config.items():
+            candidate_nat = candidate_info.get("nat", False)
+            candidate_localnet = candidate_info.get("localnetworkid", -1)
+            if candidate_id == self_id: # 跳过自己
+                continue
+            if nat_status or candidate_nat:
+                if localnetworkid != candidate_localnet:
+                    continue
+            # 添加 reachable_by
+            if candidate_id not in reachable_by:
+                reachable_by[candidate_id] = set()
+            reachable_by[self_id].add(candidate_id)
+            reachable_by[candidate_id].add(self_id)
+        # 添加到消息队列
+        for target_id in reachable_by[self_id]:
             enqueue_message(target_id, self_ip, self_port, hello_msg)
 
     threading.Thread(target=loop, daemon=True).start()

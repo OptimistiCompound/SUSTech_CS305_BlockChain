@@ -52,7 +52,7 @@ def dispatch_message(msg, self_id, self_ip):
     msg_type = msg.get["type"]
     msg_id = msg.get["id"]
 
-    # Read the message.
+    ''' Read the message. '''
 
     # Check if the message has been seen in `seen_message_ids` to prevent replay attacks. If yes, drop the message and add one to `message_redundancy`. If not, add the message ID to `seen_message_ids`.
     if msg_id in seen_message_ids:
@@ -66,6 +66,7 @@ def dispatch_message(msg, self_id, self_ip):
     # Check if the sender exists in the `blacklist` of `peer_manager.py`. If yes, drop the message.
     if msg["sender"] in blacklist:
         return
+
 
     if msg_type == "RELAY":
 
