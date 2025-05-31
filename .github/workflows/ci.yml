@@ -20,7 +20,7 @@ jobs:
         fi
         pip install mock unittest2
         
-    - name: Run Tests
+    - name: Run tests
       run: |
         cd Starter_Code_New
-        python -m unittest discover Tests -p "*_test.py"
+        python -m unittest discover -p "*_test.py"
