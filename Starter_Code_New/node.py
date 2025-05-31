@@ -41,6 +41,7 @@ def main():
         "light": self_info.get("light", False)
     }
 
+    # 一开始，known_peers 只有自己
     for peer_id, peer_info in config["peers"].items():
         known_peers[peer_id] = (peer_info["ip"], peer_info["port"])
         peer_config = config["peers"]
