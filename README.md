@@ -70,7 +70,7 @@ Figure 3 shows the relationship between different functionalities. Each core com
 ### Part 1: Peer Initialization
 
 Upon joining the network, a peer:
-* configures its `IP address`, `port`, and `gossip fanout`, and
+* Configures its `IP address`, `port`, and `gossip fanout`, and `localnetworkid`.
 * Chooses its role: `normal` or `malicious`, `lightweight` or `full`, `NATed` or `non-NATed`.
 * Initializes a TCP socket to receive incoming messages.
 
@@ -79,6 +79,7 @@ Upon joining the network, a peer:
 * `normal` or `malicious` peer: A normal peer always generates correct transactions and blocks. Instead, a malicious peer can generate incorrect transactions and blocks (e.g., with the wrong block ID).
 * `lightweight` or `full` peer: In the introduction, we introduce that all peers verify the block and store a copy of the blockchain, which is called full peers. However, in practice, there are some resource-limited devices (e.g., mobile phones and laptops), which do not have enough computing and storage capacities to verify and store all blocks. To solve this issue, Ethereum allows peers to act as lightweight peers, which do not verify blocks and store all blocks. Instead, lightweight peers store the header of blocks without transactions.
 * `NATed` or `non-NATed` peer: This project considers network address translation (NAT). A NATed peer is generally located in a local network and cannot interact directly with peers outside the local network. Instead, non-NATed peers in the local network act as NAT routers or relaying peers between NATed peers and peers outside the local network. Typically, when forwarding external messages to a peer in a local network, a relaying peer must find the destination peer's IP address in the local network based on the NAT translation table. Here, to reduce the complexity, we only simulate the logic of NAT and ignore the NAT translation table; that is, a NATed peer has only one IP address across the network.
+* `localnetworkid`: Denote the ID of the peer's local network.
 
 -----
 
@@ -213,7 +214,7 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 1. `start_peer_discovery` 
    
 * Define the JSON format of a `hello` message, which should include: `{message type, sender’s ID, IP address, port, flags, and message ID}`. A `sender’s ID` can be `peer_port`. The `flags` should indicate whether the peer is `NATed or non-NATed`, and `full or lightweight`. The `message ID` can be a random number.
-* Send a `hello` message to all known peers and put the messages into the outbox queue.
+* Send a `hello` message to all reachable peers and put the messages into the outbox queue.
   
 2. `handle_hello_message`
 
@@ -221,8 +222,7 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 * If the sender is unknown, add it to the list of known peers (`known_peer`) and record their flags (`peer_flags`).
 * Update the set of reachable peers (`reachable_by`).
 
-**Tips:** Each peer can only receive `hello` messages from reachable peers and never forward `hello` messages. If a peer receives `hello` messages from a NATed peer, it can act as the relaying peers of the NATed peer.
-
+**Tips:** Each peer can only receive `hello` messages from reachable peers and never forward `hello` messages. A NATed peer can only say `hello` to peers in the same local network. If a peer receives `hello` messages from a NATed peer, it can act as the relaying peers of the NATed peer. If a peer and a NATed peer are not in the same local network, they cannot say `hello` to each other.
 #### `peer_manager.py`: This part is responsible for checking the status and recording the performance of known peers.
 
 1. `start_ping_loop`
@@ -385,9 +385,9 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 
 * Check if the target peer is NATed. 
 
-* If the target peer is NATed, use the function `get_relay_peer` to find the best relaying peer. Define the JSON format of a `RELAY` message, which should include `{message type, sender's ID, target peer's ID, `payload`}`. `payload` is the sending message. Send the `RELAY` message to the best relaying peer using the function `send_message`.
+* If the target peer is NATed and in a different local network, use the function `get_relay_peer` to find the best relaying peer. Define the JSON format of a `RELAY` message, which should include `{message type, sender's ID, target peer's ID, `payload`}`. `payload` is the sending message. Send the `RELAY` message to the best relaying peer using the function `send_message`.
   
-* If the target peer is non-NATed, send the message to the target peer using the function `send_message`.
+* If the target peer is in the same local network, or both the peer and the target peer are Non-NATed, send the message to the target peer using the function `send_message`.
 
 6. `get_relay_peer`
 
