@@ -33,14 +33,6 @@ drop_stats = {
     "OTHER": 0
 }
 
-priority_order = {
-    "BLOCK": 1,
-    "TX": 2,
-    "PING": 3,
-    "PONG": 4,
-    "HELLO": 5
-}
-
 # Queues per peer and priority
 queues = defaultdict(lambda: defaultdict(deque))
 retries = defaultdict(int)
