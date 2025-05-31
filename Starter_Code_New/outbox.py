@@ -125,14 +125,6 @@ def get_relay_peer(self_id, dst_id):
 
     return best_peer  # (peer_id, ip, port) or None
 
-def send_message(ip, port, message):
-
-    # TODO: Send the message to the target peer. 
-    # Wrap the function `send_message` with the dynamic network condition in the function `apply_network_condition` of `link_simulator.py`.
-    pass
-
-send_message = apply_network_conditions(send_message)
-
 def apply_network_conditions(send_func):
     def wrapper(ip, port, message):
 
@@ -147,6 +139,15 @@ def apply_network_conditions(send_func):
         # TODO: Send the message using the function `send_func`.
         pass
     return wrapper
+
+def send_message(ip, port, message):
+
+    # TODO: Send the message to the target peer. 
+    # Wrap the function `send_message` with the dynamic network condition in the function `apply_network_condition` of `link_simulator.py`.
+    pass
+
+send_message = apply_network_conditions(send_message)
+
 
 def start_dynamic_capacity_adjustment():
     def adjust_loop():
