@@ -17,7 +17,8 @@ def request_block_sync(self_id):
     # 构建GET_BLOCK_HEADERS消息
     msg = {
         "type": "GET_BLOCK_HEADERS",
-        "sender": self_id
+        "sender": self_id,
+        "message_id": generate_message_id(),
     }
     # 发送到所有已知节点
     for peer in known_peers:
@@ -49,7 +50,8 @@ def create_dummy_block(peer_id, MALICIOUS_MODE):
         "peer_id": peer_id,
         "timestamp": time.time(),
         "previous_block_id": prev_block_id,
-        "transactions": txs
+        "transactions": txs,
+        "message_id": generate_message_id(),
     }
     # 计算区块ID
     if MALICIOUS_MODE:

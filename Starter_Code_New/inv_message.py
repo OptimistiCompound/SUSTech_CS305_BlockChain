@@ -11,7 +11,7 @@ def create_inv(block_ids, sender_id):
         "type": "INV",
         "sender": sender_id,
         "block_ids": block_ids,
-        "msg_id": generate_message_id()
+        "message_id": generate_message_id()
     }
 
 def get_inventory():

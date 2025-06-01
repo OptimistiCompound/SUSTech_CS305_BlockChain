@@ -49,17 +49,17 @@ def get_redundancy_stats():
 # === Main Message Dispatcher ===
 def dispatch_message(msg, self_id, self_ip):
     
-    msg_type = msg.get["type"]
-    msg_id = msg.get["id"]
+    msg_type = msg.get("type")
+    message_id = msg.get("message_id")
 
     ''' Read the message. '''
 
     # Check if the message has been seen in `seen_message_ids` to prevent replay attacks. If yes, drop the message and add one to `message_redundancy`. If not, add the message ID to `seen_message_ids`.
-    if msg_id in seen_message_ids:
+    if message_id in seen_message_ids:
         message_redundancy += 1
         return
     else:
-        seen_message_ids[msg_id] = time.time()
+        seen_message_ids[message_id] = time.time()
     # Check if the sender sends message too frequently using the function `is_inbound_limited`. If yes, drop the message.
     if is_inbound_limited(msg["sender"]):
         return
@@ -67,7 +67,7 @@ def dispatch_message(msg, self_id, self_ip):
     if msg["sender"] in blacklist:
         return
 
-
+    #format in outbox.relay_or_direct_send
     if msg_type == "RELAY":
 
         # TODO: Check if the peer is the target peer.
@@ -75,10 +75,12 @@ def dispatch_message(msg, self_id, self_ip):
         # If not, forward the message to target peer using the function `enqueue_message` in `outbox.py`.
         pass
 
+    #format in peer_discovery.start_peer_discovery
     elif msg_type == "HELLO":
         # Call the function `handle_hello_message` in `peer_discovery.py` to process the message.
         handle_hello_message(msg, self_id)
 
+    #format in block_handler.block_generation
     elif msg_type == "BLOCK":
         # TODO: Check the correctness of block ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
         
@@ -101,6 +103,7 @@ def dispatch_message(msg, self_id, self_ip):
 
         pass
 
+    #format in peer_manager.start_ping_loop
     elif msg_type == "PING":
         
         # TODO: Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
@@ -111,6 +114,7 @@ def dispatch_message(msg, self_id, self_ip):
 
         pass
 
+    #format in peer_manager.create_pong
     elif msg_type == "PONG":
         
         # TODO: Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
@@ -119,6 +123,7 @@ def dispatch_message(msg, self_id, self_ip):
 
         pass
 
+    #format in inv_message.create_inv
     elif msg_type == "INV":
         
         # TODO: Read all blocks IDs in the local blockchain using the function `get_inventory` in `block_handler.py`.
@@ -131,6 +136,7 @@ def dispatch_message(msg, self_id, self_ip):
 
         pass
 
+    #format in block_handler.create_getblock
     elif msg_type == "GETBLOCK":
         
         # TODO: Extract the block IDs from the message.
@@ -147,6 +153,7 @@ def dispatch_message(msg, self_id, self_ip):
 
         pass
 
+    #format in block_handler.request_block_sync
     elif msg_type == "GET_BLOCK_HEADERS":
         
         # TODO: Read all block header in the local blockchain and store them in `headers`.
@@ -156,7 +163,8 @@ def dispatch_message(msg, self_id, self_ip):
         # TODO: Send the `BLOCK_HEADERS` message to the requester using the function `enqueue_message` in `outbox.py`.
 
         pass
-
+    
+    #format in this.dispatch_message
     elif msg_type == "BLOCK_HEADERS":
         
         # TODO: Check if the previous block of each block exists in the local blockchain or the received block headers.
