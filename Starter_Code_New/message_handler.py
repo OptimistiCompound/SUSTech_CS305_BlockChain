@@ -50,16 +50,16 @@ def get_redundancy_stats():
 def dispatch_message(msg, self_id, self_ip):
     
     msg_type = msg.get("type")
-    msg_id = msg.get("id")
+    message_id = msg.get("message_id")
 
     ''' Read the message. '''
 
     # Check if the message has been seen in `seen_message_ids` to prevent replay attacks. If yes, drop the message and add one to `message_redundancy`. If not, add the message ID to `seen_message_ids`.
-    if msg_id in seen_message_ids:
+    if message_id in seen_message_ids:
         message_redundancy += 1
         return
     else:
-        seen_message_ids[msg_id] = time.time()
+        seen_message_ids[message_id] = time.time()
     # Check if the sender sends message too frequently using the function `is_inbound_limited`. If yes, drop the message.
     if is_inbound_limited(msg["sender"]):
         return
