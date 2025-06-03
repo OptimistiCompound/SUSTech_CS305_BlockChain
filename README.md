@@ -128,8 +128,8 @@ To simulate the process of sending messages (e.g., transactions and blocks), all
 
 * When sending a message, add the message to the outbox queue.
 * Read a message from the queue based on their priorities.
-* If the message destination is a non-NATed peer, send the message to the destination directly.
-* If the message destination is a NATed peer, find the best relaying peer and send the message to the relaying peer.
+* If the message destination is in the same local network or a non-NATed peer (while the peer is also non-NATed), send the message to the destination directly.
+* If the message destination is a NATed peer and in different local network, find the best relaying peer and send the message to the relaying peer.
 
 --------
 
