@@ -101,11 +101,11 @@ The procedure of peer discovery is as follows:
 
 ### Part 3: Block and Transaction Generation and Verification
 
-After initializing a peer and finding the known peers, a full peer starts generating and verifying transactions and blocks. In this project, each full peer periodically generates one transaction and broadcasts it to other full peers for verification. 
+After initializing a peer and finding the known peers, a full peer starts generating and verifying transactions and blocks. 
 
-A transaction is valid if the transaction ID is correct. These transactions are also stored in the peer's local transaction pool, `tx_pool`. 
+In this project, each full peer periodically generates one transaction and broadcasts it to other full peers for verification. **A transaction is valid if the transaction ID is correct**. These transactions are also stored in the peer's local transaction pool, `tx_pool`. 
 
-Since we only focus on transaction and block exchange in the blockchain P2P network, we simplify block generation here. Instead of selecting a block generator to generate a block, in each block period, each peer packages transactions in their `tx_pool` into a block independently and broadcasts it to other peers for verification. A block is valid if the `block ID` is correct. 
+Since we only focus on transaction and block exchange in the blockchain P2P network, we simplify block generation here. Instead of selecting a block generator to generate a block, in each block period, each peer packages transactions in their `tx_pool` into a block independently and broadcasts it to other peers for verification. **A block is valid if the `block ID` is correct**. 
 
 The procedure for transaction/block generation and verification is as follows:
 
@@ -113,7 +113,7 @@ The procedure for transaction/block generation and verification is as follows:
 * Start generating transactions.
 * Broadcast the transactions to known peers for verification.
 * Add the valid transactions to the local `tx_pool`.
-* Package the transactions in the local `tx_pool` into a new block.
+* Package the transactions in the local `tx_pool` into a new block. The transactions are removed from the local `tx_pool` after being packaged into the new block.
 * Broadcast the block to known peers for verification.
 * Add the valid block to the local blockchain.
 
@@ -128,8 +128,8 @@ To simulate the process of sending messages (e.g., transactions and blocks), all
 
 * When sending a message, add the message to the outbox queue.
 * Read a message from the queue based on their priorities.
-* If the message destination is a non-NATed peer, send the message to the destination directly.
-* If the message destination is a NATed peer, find the best relaying peer and send the message to the relaying peer.
+* If the message destination is in the same local network or a non-NATed peer (while the peer is also non-NATed), send the message to the destination directly.
+* If the message destination is a NATed peer and in different local network, find the best relaying peer and send the message to the relaying peer.
 
 --------
 
@@ -142,14 +142,14 @@ When receiving messages from other peers, the messages must be dispatched and pr
 * Check the message type and process the messages accordingly:
 
   * msg.type=`TX`,
-    * Check the validity of the transaction. If invalid, drop the transaction and record the sender's offence.
+    * Check the validity of the transaction. If invalid, drop the transaction and record the sender's offence.(**A transaction is valid if the transaction ID is correct**.)
     * Check whether the transaction has been received. If yes, drop the transaction to prevent replay attacks.
     * Record the count of redundant transactions if they have been received.
     * Add the new transaction to the local `tx_pool` if it has not been received.
     * Broadcast the new transaction to known peers.
       
   * msg.type=`BLOCK`,
-    * Check the validity of the block. If invalid, drop the block and record the sender's offence.
+    * Check the validity of the block. If invalid, drop the block and record the sender's offence.(**A block is valid if the `block ID` is correct**.)
     * Check whether the block has been received. If yes, drop the block to prevent replay attacks.
     * Record the count of redundant blocks if they have been received.
     * Add the new block to the list of orphaned blocks if its previous block does not exist in the blockchain due to network delay.
@@ -214,11 +214,11 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 1. `start_peer_discovery` 
    
 * Define the JSON format of a `hello` message, which should include: `{message type, sender’s ID, IP address, port, flags, and message ID}`. A `sender’s ID` can be `peer_port`. The `flags` should indicate whether the peer is `NATed or non-NATed`, and `full or lightweight`. The `message ID` can be a random number.
-* Send a `hello` message to all reachable peers and put the messages into the outbox queue.
+* Send a `hello` message to all reachable peers and put the messages into the outbox queue. Print out the event of saying `hello` to other peers.
   
 2. `handle_hello_message`
 
-* Read information in the received `hello` message.
+* Read information in the received `hello` message. Print out the event of receving `hello` messages from other peers.
 * If the sender is unknown, add it to the list of known peers (`known_peer`) and record their flags (`peer_flags`).
 * Update the set of reachable peers (`reachable_by`).
 
@@ -420,6 +420,8 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 * Read the configuration `fanout` of the peer in `peer_config` of `peer_discovery.py`.
 
 * Randomly select the number of target peers from `known_peers`, which is equal to `fanout`. If the gossip message is a transaction, skip the lightweight peers in the `know_peers`.
+
+* Print out the event of gossiping messages.
 
 * Send the message to the selected target peer and put them in the outbox queue.
 
