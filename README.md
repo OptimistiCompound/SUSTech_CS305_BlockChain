@@ -113,7 +113,7 @@ The procedure for transaction/block generation and verification is as follows:
 * Start generating transactions.
 * Broadcast the transactions to known peers for verification.
 * Add the valid transactions to the local `tx_pool`.
-* Package the transactions in the local `tx_pool` into a new block.
+* Package the transactions in the local `tx_pool` into a new block. The transactions are removed from the local `tx_pool` after being packaged into the new block.
 * Broadcast the block to known peers for verification.
 * Add the valid block to the local blockchain.
 
