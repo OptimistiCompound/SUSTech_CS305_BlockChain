@@ -15,7 +15,7 @@ def start_ping_loop(self_id, peer_table, interval=5):
     def loop():
        while True:
             cur_time = time.time()
-            for peer_id in peer_table:
+            for peer_id, (ip, port) in peer_table.items():
                 if peer_id == self_id:
                     continue
                 msg = {
@@ -23,7 +23,7 @@ def start_ping_loop(self_id, peer_table, interval=5):
                     "sender": self_id,
                     "timestamp": cur_time
                 }
-                enqueue_message(msg, peer_id)
+                enqueue_message(peer_id, ip, port, msg)
             time.sleep(interval)
     threading.Thread(target=loop, daemon=True).start()
 
