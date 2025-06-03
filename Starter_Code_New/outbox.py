@@ -249,4 +249,3 @@ def get_outbox_status():
 def get_drop_stats():
     # Return the drop states (`drop_stats`).
     return drop_stats
-
