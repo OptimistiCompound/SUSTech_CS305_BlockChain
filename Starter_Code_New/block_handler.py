@@ -50,8 +50,7 @@ def create_dummy_block(peer_id, MALICIOUS_MODE):
         "peer_id": peer_id,
         "timestamp": time.time(),
         "previous_block_id": prev_block_id,
-        "transactions": txs,
-        "message_id": generate_message_id(),
+        "transactions": txs
     }
     # 计算区块ID
     if MALICIOUS_MODE:

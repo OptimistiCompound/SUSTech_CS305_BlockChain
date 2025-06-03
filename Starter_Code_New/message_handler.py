@@ -4,7 +4,7 @@ import time
 import hashlib
 import random
 from collections import defaultdict
-from peer_discovery import handle_hello_message, known_peers, peer_config
+from peer_discovery import handle_hello_message, known_peers, peer_config, peer_flags
 from block_handler import handle_block, get_block_by_id, create_getblock, received_blocks, header_store
 from inv_message import  create_inv, get_inventory
 from block_handler import create_getblock
@@ -50,7 +50,7 @@ def get_redundancy_stats():
 def dispatch_message(msg, self_id, self_ip):
     
     msg_type = msg.get("type")
-    message_id = msg.get("message_id")
+    message_id = msg.get("message_id", msg.get("block_id", msg.get("tx_id")))
 
     ''' Read the message. '''
 
@@ -70,10 +70,15 @@ def dispatch_message(msg, self_id, self_ip):
     #format in outbox.relay_or_direct_send
     if msg_type == "RELAY":
 
-        # TODO: Check if the peer is the target peer.
+        # Check if the peer is the target peer.
         # If yes, extract the payload and recall the function `dispatch_message` to process the payload.
         # If not, forward the message to target peer using the function `enqueue_message` in `outbox.py`.
-        pass
+        target_id = msg["target"]
+        if target_id == self_id:
+            payload = msg["payload"]
+            dispatch_message(payload, self_id, self_ip)
+        else:
+            enqueue_message(target_id, self_ip, peer_config[target_id][1], msg)
 
     #format in peer_discovery.start_peer_discovery
     elif msg_type == "HELLO":
@@ -82,27 +87,47 @@ def dispatch_message(msg, self_id, self_ip):
 
     #format in block_handler.block_generation
     elif msg_type == "BLOCK":
-        # TODO: Check the correctness of block ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
-        block_id = msg["block_id"]
+        from block_handler import compute_block_hash
 
-        # TODO: Call the function `handle_block` in `block_handler.py` to process the block.
-        
-        # TODO: Call the function `create_inv` to create an `INV` message for the block.
-        
-        # TODO: Broadcast the `INV` message to known peers using the function `gossip_message` in `outbox.py`.
+        # Check the correctness of block ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
+        block_without_id = {
+            "type": "BLOCK",
+            "peer_id": msg["peer_id"],
+            "timestamp": msg["timestamp"],
+            "previous_block_id": msg["previous_block_id"],
+            "transactions": msg["transactions"]
+        }
+        rcv_block_id = msg["block_id"]
+        calc_blcok_id = compute_block_hash(block_without_id)
+        if rcv_block_id != calc_blcok_id:
+            record_offense(msg["peer_id"])
+            return
 
-        pass
+        # Call the function `handle_block` in `block_handler.py` to process the block.
+        handle_block(msg, self_id)
+
+        # Call the function `create_inv` to create an `INV` message for the block.
+        inv_msg = create_inv(msg["block_id"], self_id)
+
+        # Broadcast the `INV` message to known peers using the function `gossip_message` in `outbox.py`.
+        gossip_message(inv_msg, self_id)
 
     #format in transaction.start_transaction_generation
     elif msg_type == "TX":
-        
-        # TODO: Check the correctness of transaction ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
-        
-        # TODO: Add the transaction to `tx_pool` using the function `add_transaction` in `transaction.py`.
-        
-        # TODO: Broadcast the transaction to known peers using the function `gossip_message` in `outbox.py`.
+        from transaction import TransactionMessage
+        # Check the correctness of transaction ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
+        rcv_tx_id = msg["id"]
+        tx = TransactionMessage(msg["from"], msg["to"], msg["amount"], msg["timestamp"])
+        calc_tx_id = tx.compute_hash()
+        if rcv_tx_id!= calc_tx_id:
+            record_offense(msg["from"])
+            return
 
-        pass
+        # Add the transaction to `tx_pool` using the function `add_transaction` in `transaction.py`.
+        add_transaction(tx)
+
+        # Broadcast the transaction to known peers using the function `gossip_message` in `outbox.py`.
+        gossip_message(msg, self_id)
 
     #format in peer_manager.start_ping_loop
     elif msg_type == "PING":
@@ -127,56 +152,117 @@ def dispatch_message(msg, self_id, self_ip):
     #format in inv_message.create_inv
     elif msg_type == "INV":
         
-        # TODO: Read all blocks IDs in the local blockchain using the function `get_inventory` in `block_handler.py`.
-        
-        # TODO: Compare the local block IDs with those in the message.
-        
-        # TODO: If there are missing blocks, create a `GETBLOCK` message to request the missing blocks from the sender.
-        
-        # TODO: Send the `GETBLOCK` message to the sender using the function `enqueue_message` in `outbox.py`.
-
-        pass
+        # Read all blocks IDs in the local blockchain using the function `get_inventory` in `block_handler.py`.
+        # Compare the local block IDs with those in the message.
+        # If there are missing blocks, create a `GETBLOCK` message to request the missing blocks from the sender.
+        # Send the `GETBLOCK` message to the sender using the function `enqueue_message` in `outbox.py`.
+        local_block_ids = get_inventory() # list of block_id
+        rcv_block_ids = msg.get("block_ids", [])
+        missing_block_ids = [block_id for block_id in rcv_block_ids if block_id not in local_block_ids]
+        if missing_block_ids:
+            getblock_msg = create_getblock(missing_block_ids, self_id)
+            enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], getblock_msg)
 
     #format in block_handler.create_getblock
     elif msg_type == "GETBLOCK":
         
-        # TODO: Extract the block IDs from the message.
-        
-        # TODO: Get the blocks from the local blockchain according to the block IDs using the function `get_block_by_id` in `block_handler.py`.
-        
-        # TODO: If the blocks are not in the local blockchain, create a `GETBLOCK` message to request the missing blocks from known peers.
-        
-        # TODO: Send the `GETBLOCK` message to known peers using the function `enqueue_message` in `outbox.py`.
-        
-        # TODO: Retry getting the blocks from the local blockchain. If the retry times exceed 3, drop the message.
-        
-        # TODO: If the blocks exist in the local blockchain, send the blocks one by one to the requester using the function `enqueue_message` in `outbox.py`.
+        # Extract the block IDs from the message.
+        rcv_block_ids = msg.get("block_ids", [])
+        ret_blocks = []
+        missing_block_ids = []
+        for block_id in rcv_block_ids:
+            # Get the blocks from the local blockchain according to the block IDs using the function `get_block_by_id` in `block_handler.py`.
+            if block_id in received_blocks:
+                ret_blocks.append(get_block_by_id(block_id))
 
-        pass
+            # If the blocks are not in the local blockchain, create a `GETBLOCK` message to request the missing blocks from known peers.
+            # Send the `GETBLOCK` message to known peers using the function `enqueue_message` in `outbox.py`.
+            else:
+                missing_block_ids.append(block_id)
+        get_block_msg = create_getblock(self_id, missing_block_ids)
+        enqueue_message(self_id, self_ip, peer_config[self_id][1], get_block_msg)
+        time.sleep(10)
+
+        # Retry getting the blocks from the local blockchain. If the retry times exceed 3, drop the message.
+        retry_cnt = 0
+        found_block = []
+        while missing_block_ids and retry_cnt < 3:
+            # retry
+            retry_cnt += 1
+            print(f"get block retry {retry_cnt} times")
+            get_block_msg = create_getblock(self_id, missing_block_ids)
+            enqueue_message(self_id, self_ip, peer_config[self_id][1], get_block_msg)
+            time.sleep(10)
+
+            # check if the blocks exist in the local blockchain
+            for block_id in missing_block_ids:
+                if block_id in received_blocks:
+                    ret_blocks.append(get_block_by_id(block_id))
+                    found_block.append(block_id)
+            for block_id in found_block:
+                missing_block_ids.remove(block_id)
+
+        # If the blocks exist in the local blockchain, send the blocks one by one to the requester using the function `enqueue_message` in `outbox.py`.
+        for block in ret_blocks:
+            enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], block)
+
 
     #format in block_handler.request_block_sync
     elif msg_type == "GET_BLOCK_HEADERS":
         
-        # TODO: Read all block header in the local blockchain and store them in `headers`.
-        
-        # TODO: Create a `BLOCK_HEADERS` message, which should include `{message type, sender's ID, headers}`.
-        
-        # TODO: Send the `BLOCK_HEADERS` message to the requester using the function `enqueue_message` in `outbox.py`.
+        # Read all block header in the local blockchain and store them in `headers`.
+        headers = []
+        for block in received_blocks:
+            header = {
+                "peer_id": block["peer_id"],
+                "timestamp": block["timestamp"],
+                "block_id": block["block_id"],
+                "previous_block_id": block["previous_block_id"]
+            }
+            headers.append(header)
 
-        pass
+        # Create a `BLOCK_HEADERS` message, which should include `{message type, sender's ID, headers}`.
+        block_headers_msg = {
+            "type": "BLOCK_HEADERS",
+            "sender": self_id,
+            "headers": headers
+        }
+
+        # Send the `BLOCK_HEADERS` message to the requester using the function `enqueue_message` in `outbox.py`.
+        enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], block_headers_msg)
     
     #format in this.dispatch_message
     elif msg_type == "BLOCK_HEADERS":
         
-        # TODO: Check if the previous block of each block exists in the local blockchain or the received block headers.
-        
-        # TODO: If yes and the peer is lightweight, add the block headers to the local blockchain.
-        
-        # TODO: If yes and the peer is full, check if there are missing blocks in the local blockchain. If there are missing blocks, create a `GET_BLOCK` message and send it to the sender.
-        
-        # TODO: If not, drop the message since there are orphaned blocks in the received message and, thus, the message is invalid.
+        # Check if the previous block of each block exists in the local blockchain or the received block headers.
+        prev_exist = True
+        headers = msg.get("headers", [])
+        for header in headers:
+            if header["previous_block_id"] not in received_blocks:
+                prev_exist = False
 
-        pass
+        # If yes and the peer is lightweight, add the block headers to the local blockchain.
+        # If yes and the peer is full, check if there are missing blocks in the local blockchain. 
+        # If there are missing blocks, create a `GET_BLOCK` message and send it to the sender.
+        if prev_exist:
+            light = peer_flags[msg["sender"]]["light"]
+            if light:
+                for header in headers:
+                    header_store.append(header)
+            else:
+                missing_block_ids = []
+                for header in headers:
+                    if header["block_id"] not in received_blocks:
+                        missing_block_ids.append(header["block_id"])
+                
+                for block_id in missing_block_ids:
+                    get_block_msg = create_getblock(self_id, [block_id])
+                    enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], get_block_msg)
+
+        # If not, drop the message since there are orphaned blocks in the received message and, thus, the message is invalid.
+        else:
+            print(f"[{self_id}] Orphaned blocks in the received message, message dropped.")
+            return
 
 
     else:
