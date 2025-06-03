@@ -50,7 +50,7 @@ def get_redundancy_stats():
 def dispatch_message(msg, self_id, self_ip):
     
     msg_type = msg.get("type")
-    message_id = msg.get("message_id")
+    message_id = msg.get("message_id", msg.get("block_id", msg.get("tx_id")))
 
     ''' Read the message. '''
 
@@ -70,10 +70,15 @@ def dispatch_message(msg, self_id, self_ip):
     #format in outbox.relay_or_direct_send
     if msg_type == "RELAY":
 
-        # TODO: Check if the peer is the target peer.
+        # Check if the peer is the target peer.
         # If yes, extract the payload and recall the function `dispatch_message` to process the payload.
         # If not, forward the message to target peer using the function `enqueue_message` in `outbox.py`.
-        pass
+        target_id = msg["target"]
+        if target_id == self_id:
+            payload = msg["payload"]
+            dispatch_message(payload, self_id, self_ip)
+        else:
+            enqueue_message(target_id, self_ip, peer_config[target_id][1], msg)
 
     #format in peer_discovery.start_peer_discovery
     elif msg_type == "HELLO":
