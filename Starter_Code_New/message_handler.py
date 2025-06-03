@@ -132,22 +132,20 @@ def dispatch_message(msg, self_id, self_ip):
     #format in peer_manager.start_ping_loop
     elif msg_type == "PING":
         
-        # TODO: Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
-        
-        # TODO: Create a `pong` message using the function `create_pong` in `peer_manager.py`.
-        
-        # TODO: Send the `pong` message to the sender using the function `enqueue_message` in `outbox.py`.
-
-        pass
+        # Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
+        # Create a `pong` message using the function `create_pong` in `peer_manager.py`.
+        # Send the `pong` message to the sender using the function `enqueue_message` in `outbox.py`.
+        update_peer_heartbeat(msg["sender"])
+        pong_msg = create_pong(msg["sender"], msg["timestamp"])
+        enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], pong_msg)
 
     #format in peer_manager.create_pong
     elif msg_type == "PONG":
         
-        # TODO: Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
-        
-        # TODO: Call the function `handle_pong` in `peer_manager.py` to handle the message.
-
-        pass
+        # Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
+        # Call the function `handle_pong` in `peer_manager.py` to handle the message.
+        update_peer_heartbeat(msg["sender"])
+        handle_pong(msg)
 
     #format in inv_message.create_inv
     elif msg_type == "INV":

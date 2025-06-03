@@ -61,6 +61,8 @@ def start_peer_discovery(self_id, self_info):
     threading.Thread(target=loop, daemon=True).start()
 
 def handle_hello_message(msg, self_id):
+    print(f"🤗 Received hello message from {msg['sender_id']}")
+
     new_peers = []
     
     # Read information in the received `hello` message.

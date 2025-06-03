@@ -138,6 +138,9 @@ def send_from_queue(self_id):
 def relay_or_direct_send(self_id, dst_id, message):
     from peer_discovery import known_peers, peer_flags
     from utils import generate_message_id
+    
+    if message["type"] == "HELLO":
+        print(f"🟢 Sending HELLO to {dst_id}")
 
     # Check if the target peer is NATed. 
     nat, _ = peer_flags[dst_id]
@@ -149,6 +152,7 @@ def relay_or_direct_send(self_id, dst_id, message):
     if nat:
         relay_peer = get_relay_peer(self_id, dst_id)
         if relay_peer:
+            # print(f"🟡 Sending RELAY to {relay_peer[0]}")
             relay_msg = {
                 "type": "RELAY",
                 "sender": self_id,
@@ -206,6 +210,10 @@ def send_message(ip, port, message):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((ip, port))
     sock.sendall(json.dumps(message).encode())
+    print(f"Sent message to {ip}:{port}: {message}")
+    sock.close(
+        # 关闭socket
+    )
 
 send_message = apply_network_conditions(send_message)
 
