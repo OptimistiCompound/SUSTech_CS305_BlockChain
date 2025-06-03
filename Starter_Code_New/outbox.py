@@ -64,95 +64,144 @@ rate_limiter = RateLimiter()
 
 def enqueue_message(target_id, ip, port, message):
     from peer_manager import blacklist, rtt_tracker
-
-    # TODO: Check if the peer sends message to the receiver too frequently using the function `is_rate_limited`. If yes, drop the message.
-  
-    # TODO: Check if the receiver exists in the `blacklist`. If yes, drop the message.
-  
-    # TODO: Classify the priority of the sending messages based on the message type using the function `classify_priority`.
-  
-    # TODO: Add the message to the queue (`queues`) if the length of the queue is within the limit `QUEUE_LIMIT`, or otherwise, drop the message.
-    pass
+    # 1. Rate limit
+    if is_rate_limited(target_id):
+        drop_stats[message.get("type", "OTHER")] += 1
+        return
+    # 2. Blacklist
+    if target_id in blacklist:
+        drop_stats[message.get("type", "OTHER")] += 1
+        return
+    # 3. Classify priority
+    priority = classify_priority(message)
+    # 4. Enqueue or drop
+    with lock:
+        q = queues[target_id][priority]
+        if len(q) >= QUEUE_LIMIT:
+            drop_stats[message.get("type", "OTHER")] += 1
+            return
+        q.append((ip, port, message))
 
 
 def is_rate_limited(peer_id):
-    # TODO:Check how many messages were sent from the peer to a target peer during the `TIME_WINDOW` that ends now.
-  
-    # TODO: If the sending frequency exceeds the sending rate limit `RATE_LIMIT`, return `TRUE`; otherwise, record the current sending time into `peer_send_timestamps`.
-    pass
+    now = time.time()
+    timestamps = peer_send_timestamps[peer_id]
+    timestamps = [ts for ts in timestamps if now - ts < TIME_WINDOW]
+    peer_send_timestamps[peer_id] = timestamps
+    if len(timestamps) >= RATE_LIMIT:
+        return True
+    peer_send_timestamps[peer_id].append(now)
+    return False
 
 def classify_priority(message):
-    # TODO: Classify the priority of a message based on the message type.
-    pass
+    t = message.get("type", "OTHER")
+    if t in PRIORITY_HIGH:
+        return "HIGH"
+    elif t in PRIORITY_MEDIUM:
+        return "MEDIUM"
+    elif t in PRIORITY_LOW:
+        return "LOW"
+    else:
+        return "LOW"
     
 
 def send_from_queue(self_id):
     def worker():
-        
-        # TODO: Read the message in the queue. Each time, read one message with the highest priority of a target peer. After sending the message, read the message of the next target peer. This ensures the fairness of sending messages to different target peers.
-
-        # TODO: Send the message using the function `relay_or_direct_send`, which will decide whether to send the message to target peer directly or through a relaying peer.
-
-        # TODO: Retry a message if it is sent unsuccessfully and drop the message if the retry times exceed the limit `MAX_RETRIES`.
-
-        pass
+        while True:
+            with lock:
+                peer_ids = list(queues.keys())
+            for peer_id in peer_ids:
+                for priority in ["HIGH", "MEDIUM", "LOW"]:
+                    with lock:
+                        q = queues[peer_id][priority]
+                        if not q:
+                            continue
+                        ip, port, message = q.popleft()
+                    # Send message
+                    ok = relay_or_direct_send(self_id, peer_id, message)
+                    if not ok:
+                        key = (peer_id, id(message))
+                        retries[key] += 1
+                        if retries[key] < MAX_RETRIES:
+                            with lock:
+                                q.append((ip, port, message))
+                            time.sleep(RETRY_INTERVAL)
+                        else:
+                            drop_stats[message.get("type", "OTHER")] += 1
+                            retries.pop(key, None)
+            time.sleep(0.01)
     threading.Thread(target=worker, daemon=True).start()
 
 def relay_or_direct_send(self_id, dst_id, message):
     from peer_discovery import known_peers, peer_flags
-
-    # TODO: Check if the target peer is NATed. 
-
-    # TODO: If the target peer is NATed, use the function `get_relay_peer` to find the best relaying peer. 
-    # Define the JSON format of a `RELAY` message, which should include `{message type, sender's ID, target peer's ID, `payload`}`. 
-    # `payload` is the sending message. 
-    # Send the `RELAY` message to the best relaying peer using the function `send_message`.
-  
-    # TODO: If the target peer is non-NATed, send the message to the target peer using the function `send_message`.
-
-    pass
+    # NAT check
+    if peer_flags.get(dst_id) == "NAT":
+        relay_peer = get_relay_peer(self_id, dst_id)
+        if relay_peer:
+            relay_id, relay_ip, relay_port = relay_peer
+            relay_msg = {
+                "type": "RELAY",
+                "sender": self_id,
+                "target_peer": dst_id,
+                "payload": message
+            }
+            return send_message(relay_ip, relay_port, relay_msg)
+        else:
+            return False
+    else:
+        ip, port = known_peers[dst_id]
+        return send_message(ip, port, message)
 
 def get_relay_peer(self_id, dst_id):
     from peer_manager import  rtt_tracker
     from peer_discovery import known_peers, reachable_by
-
-    # TODO: Find the set of relay candidates reachable from the target peer in `reachable_by` of `peer_discovery.py`.
-    
-    # TODO: Read the transmission latency between the sender and other peers in `rtt_tracker` in `peer_manager.py`.
-  
-    # TODO: Select and return the best relaying peer with the smallest transmission latency.
-    pass
-
-    return best_peer  # (peer_id, ip, port) or None
+    candidates = reachable_by.get(dst_id, set())
+    best_peer = None
+    best_rtt = float("inf")
+    for peer in candidates:
+        if peer == self_id:
+            continue
+        rtt = rtt_tracker.get(peer, float("inf"))
+        if rtt < best_rtt:
+            best_rtt = rtt
+            best_peer = peer
+    if best_peer and best_peer in known_peers:
+        ip, port = known_peers[best_peer]
+        return (best_peer, ip, port)
+    return None
 
 def apply_network_conditions(send_func):
     def wrapper(ip, port, message):
-
-        # TODO: Use the function `rate_limiter.allow` to check if the peer's sending rate is out of limit. 
-        # If yes, drop the message and update the drop states (`drop_stats`).
-
-        # TODO: Generate a random number. If it is smaller than `DROP_PROB`, drop the message to simulate the random message drop in the channel. 
-        # Update the drop states (`drop_stats`).
-
-        # TODO: Add a random latency before sending the message to simulate message transmission delay.
-
-        # TODO: Send the message using the function `send_func`.
-        pass
+        if not rate_limiter.allow():
+            drop_stats[message.get("type", "OTHER")] += 1
+            return False
+        if random.random() < DROP_PROB:
+            drop_stats[message.get("type", "OTHER")] += 1
+            return False
+        latency = random.randint(*LATENCY_MS) / 1000
+        time.sleep(latency)
+        return send_func(ip, port, message)
     return wrapper
 
 def send_message(ip, port, message):
-
-    # TODO: Send the message to the target peer. 
-    # Wrap the function `send_message` with the dynamic network condition in the function `apply_network_condition` of `link_simulator.py`.
-    pass
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.sendto(json.dumps(message).encode(), (ip, port))
+        s.close()
+        return True
+    except Exception:
+        return False
 
 send_message = apply_network_conditions(send_message)
 
 
 def start_dynamic_capacity_adjustment():
     def adjust_loop():
-        # TODO: Peridically change the peer's sending capacity in `rate_limiter` within the range [2, 10].
-        pass
+        while True:
+            new_cap = random.randint(2, 10)
+            rate_limiter.capacity = new_cap
+            rate_limiter.refill_rate = new_cap
+            time.sleep(3)
     threading.Thread(target=adjust_loop, daemon=True).start()
 
 
@@ -160,19 +209,25 @@ def gossip_message(self_id, message, fanout=3):
 
     from peer_discovery import known_peers, peer_config
 
-    # TODO: Read the configuration `fanout` of the peer in `peer_config` of `peer_discovery.py`.
-
-    # TODO: Randomly select the number of target peer from `known_peers`, which is equal to `fanout`. If the gossip message is a transaction, skip the lightweight peers in the `know_peers`.
-
-    # TODO: Send the message to the selected target peer and put them in the outbox queue.
-    pass
+    msg_type = message.get("type", "")
+    if "fanout" in peer_config:
+        fanout = peer_config["fanout"]
+    peer_ids = list(known_peers.keys())
+    if msg_type == "TX":
+        peer_ids = [pid for pid in peer_ids if peer_config.get(pid, {}).get("type") != "light"]
+    peer_ids = [pid for pid in peer_ids if pid != self_id]
+    if not peer_ids:
+        return
+    targets = random.sample(peer_ids, min(fanout, len(peer_ids)))
+    for pid in targets:
+        ip, port = known_peers[pid]
+        enqueue_message(pid, ip, port, message)
 
 def get_outbox_status():
-    # TODO: Return the message in the outbox queue.
-    pass
+    with lock:
+        return {peer_id: {pri: list(q) for pri, q in queues[peer_id].items()} for peer_id in queues}
+
 
 
 def get_drop_stats():
-    # TODO: Return the drop states (`drop_stats`).
-    pass
-
+    return dict(drop_stats)
