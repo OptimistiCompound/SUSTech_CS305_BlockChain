@@ -1,12 +1,13 @@
 from flask import Flask, jsonify
 from threading import Thread
-from peer_manager import peer_status, rtt_tracker
+from peer_manager import peer_status, rtt_tracker, blacklist
 from transaction import get_recent_transactions
 from link_simulator import rate_limiter
 from message_handler import get_redundancy_stats
-from peer_discovery import known_peers
+from peer_discovery import known_peers, peer_config, peer_flags
 import json
-from block_handler import received_blocks
+from block_handler import received_blocks, orphan_blocks
+from outbox import queues
 
 app = Flask(__name__)
 blockchain_data_ref = None
@@ -26,47 +27,70 @@ def home():
 
 @app.route('/blocks')
 def blocks():
-    # TODO: display the blocks in the local blockchain.
-    pass
+    # 展示本地区块链（received_blocks）
+    return jsonify(received_blocks)
 
 @app.route('/peers')
 def peers():
-    # TODO: display the information of known peers, including `{peer's ID, IP address, port, status, NATed or non-NATed, lightweight or full}`.
-    pass
+    # 展示已知节点详细信息
+    result = []
+    for pid, (ip, port) in known_peers.items():
+        flags = peer_flags.get(pid, {})
+        cfg = peer_config.get(pid, {})
+        info = {
+            "peer_id": pid,
+            "ip": ip,
+            "port": port,
+            "status": peer_status.get(pid, "UNKNOWN"),
+            "nat": flags.get("nat", cfg.get("nat", False)),
+            "light": flags.get("light", cfg.get("light", False))
+        }
+        result.append(info)
+    return jsonify(result)
 
 @app.route('/transactions')
 def transactions():
-    # TODO: display the transactions in the local pool `tx_pool`.
-    pass
+    # 展示本地交易池
+    txs = get_recent_transactions()
+    return jsonify(txs)
 
 @app.route('/latency')
 def latency():
-    # TODO: display the transmission latency between peers.
-    pass
+    # 展示与其他节点的 rtt（延迟）
+    # rtt_tracker: {peer_id: float}
+    return jsonify(rtt_tracker)
 
 @app.route('/capacity')
 def capacity():
-    # TODO: display the sending capacity of the peer.
-    pass
+    # 展示本节点发送能力
+    # rate_limiter.capacity 当前允许的速率
+    return jsonify({"capacity": getattr(rate_limiter, "capacity", None)})
 
 @app.route('/orphans')
 def orphan_blocks():
-    # TODO: display the orphaned blocks.
-    pass
+    # 展示孤块池 orphan_blocks: dict
+    # 转为 list
+    return jsonify(list(orphan_blocks.values()))
 
 @app.route('/queue')
 def message_queue():
-    # TODO: display the messages in the outbox queue.
-    pass
+    # 展示队列内容 queues: defaultdict(lambda: defaultdict(deque))
+    # 转为 {peer_id: {priority: [msg, ...]}}
+    out = {}
+    for pid, prio_dict in queues.items():
+        out[pid] = {}
+        for prio, dq in prio_dict.items():
+            # 转为简单列表
+            out[pid][prio] = [str(item) for item in list(dq)]
+    return jsonify(out)
 
 @app.route('/redundancy')
 def redundancy_stats():
-    # TODO: display the number of redundant messages received.
-    pass
+    # 展示冗余消息统计
+    return jsonify({"redundancy": get_redundancy_stats()})
 
 @app.route('/blacklist')
 def blacklist_display():
-    # TODO: display the blacklist.
-    pass
-
-
+    # 展示黑名单
+    # blacklist: set or dict
+    return jsonify(list(blacklist))
