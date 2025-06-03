@@ -83,7 +83,8 @@ def dispatch_message(msg, self_id, self_ip):
     #format in block_handler.block_generation
     elif msg_type == "BLOCK":
         # TODO: Check the correctness of block ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
-        
+        block_id = msg["block_id"]
+
         # TODO: Call the function `handle_block` in `block_handler.py` to process the block.
         
         # TODO: Call the function `create_inv` to create an `INV` message for the block.
@@ -92,7 +93,7 @@ def dispatch_message(msg, self_id, self_ip):
 
         pass
 
-
+    #format in transaction.start_transaction_generation
     elif msg_type == "TX":
         
         # TODO: Check the correctness of transaction ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
