@@ -142,14 +142,14 @@ When receiving messages from other peers, the messages must be dispatched and pr
 * Check the message type and process the messages accordingly:
 
   * msg.type=`TX`,
-    * Check the validity of the transaction. If invalid, drop the transaction and record the sender's offence.
+    * Check the validity of the transaction. If invalid, drop the transaction and record the sender's offence.(**A transaction is valid if the transaction ID is correct**.)
     * Check whether the transaction has been received. If yes, drop the transaction to prevent replay attacks.
     * Record the count of redundant transactions if they have been received.
     * Add the new transaction to the local `tx_pool` if it has not been received.
     * Broadcast the new transaction to known peers.
       
   * msg.type=`BLOCK`,
-    * Check the validity of the block. If invalid, drop the block and record the sender's offence.
+    * Check the validity of the block. If invalid, drop the block and record the sender's offence.(**A block is valid if the `block ID` is correct**.)
     * Check whether the block has been received. If yes, drop the block to prevent replay attacks.
     * Record the count of redundant blocks if they have been received.
     * Add the new block to the list of orphaned blocks if its previous block does not exist in the blockchain due to network delay.
