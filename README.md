@@ -214,11 +214,11 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 1. `start_peer_discovery` 
    
 * Define the JSON format of a `hello` message, which should include: `{message type, sender’s ID, IP address, port, flags, and message ID}`. A `sender’s ID` can be `peer_port`. The `flags` should indicate whether the peer is `NATed or non-NATed`, and `full or lightweight`. The `message ID` can be a random number.
-* Send a `hello` message to all reachable peers and put the messages into the outbox queue.
+* Send a `hello` message to all reachable peers and put the messages into the outbox queue. Print out the event of saying `hello` to other peers.
   
 2. `handle_hello_message`
 
-* Read information in the received `hello` message.
+* Read information in the received `hello` message. Print out the event of receving `hello` messages from other peers.
 * If the sender is unknown, add it to the list of known peers (`known_peer`) and record their flags (`peer_flags`).
 * Update the set of reachable peers (`reachable_by`).
 
@@ -420,6 +420,8 @@ The operation logic of the project is given in the `Main` function of `node.py`.
 * Read the configuration `fanout` of the peer in `peer_config` of `peer_discovery.py`.
 
 * Randomly select the number of target peers from `known_peers`, which is equal to `fanout`. If the gossip message is a transaction, skip the lightweight peers in the `know_peers`.
+
+* Print out the event of gossiping messages.
 
 * Send the message to the selected target peer and put them in the outbox queue.
 
