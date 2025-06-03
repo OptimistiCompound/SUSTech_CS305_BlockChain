@@ -101,11 +101,11 @@ The procedure of peer discovery is as follows:
 
 ### Part 3: Block and Transaction Generation and Verification
 
-After initializing a peer and finding the known peers, a full peer starts generating and verifying transactions and blocks. In this project, each full peer periodically generates one transaction and broadcasts it to other full peers for verification. 
+After initializing a peer and finding the known peers, a full peer starts generating and verifying transactions and blocks. 
 
-A transaction is valid if the transaction ID is correct. These transactions are also stored in the peer's local transaction pool, `tx_pool`. 
+In this project, each full peer periodically generates one transaction and broadcasts it to other full peers for verification. **A transaction is valid if the transaction ID is correct**. These transactions are also stored in the peer's local transaction pool, `tx_pool`. 
 
-Since we only focus on transaction and block exchange in the blockchain P2P network, we simplify block generation here. Instead of selecting a block generator to generate a block, in each block period, each peer packages transactions in their `tx_pool` into a block independently and broadcasts it to other peers for verification. A block is valid if the `block ID` is correct. 
+Since we only focus on transaction and block exchange in the blockchain P2P network, we simplify block generation here. Instead of selecting a block generator to generate a block, in each block period, each peer packages transactions in their `tx_pool` into a block independently and broadcasts it to other peers for verification. **A block is valid if the `block ID` is correct**. 
 
 The procedure for transaction/block generation and verification is as follows:
 
