@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from threading import Thread
 from peer_manager import peer_status, rtt_tracker, blacklist
 from transaction import get_recent_transactions
-from link_simulator import rate_limiter
+#from link_simulator import rate_limiter
 from message_handler import get_redundancy_stats
 from peer_discovery import known_peers, peer_config, peer_flags
 import json
@@ -62,9 +62,7 @@ def latency():
 
 @app.route('/capacity')
 def capacity():
-    # 展示本节点发送能力
-    # rate_limiter.capacity 当前允许的速率
-    return jsonify({"capacity": getattr(rate_limiter, "capacity", None)})
+    pass
 
 @app.route('/orphans')
 def orphan_blocks():
