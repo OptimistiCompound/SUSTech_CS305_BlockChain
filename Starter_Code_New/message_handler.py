@@ -37,6 +37,7 @@ def is_inbound_limited(peer_id):
         if (cur_time <= timestamp + INBOUND_TIME_WINDOW):
             limit_cnt += 1
         if (limit_cnt >= INBOUND_RATE_LIMIT):
+            print(f"[⚠️] {peer_id} is inbound limited")
             return True
     return False
 
@@ -48,7 +49,7 @@ def get_redundancy_stats():
 
 # === Main Message Dispatcher ===
 def dispatch_message(msg, self_id, self_ip):
-    
+    global message_redundancy
     msg_type = msg.get("type")
     message_id = msg.get("message_id", msg.get("block_id", msg.get("tx_id")))
 
@@ -78,7 +79,8 @@ def dispatch_message(msg, self_id, self_ip):
             payload = msg["payload"]
             dispatch_message(payload, self_id, self_ip)
         else:
-            enqueue_message(target_id, self_ip, peer_config[target_id][1], msg)
+            target_ip, target_port = known_peers[target_id]
+            enqueue_message(target_id, target_ip, target_port, msg)
 
     #format in peer_discovery.start_peer_discovery
     elif msg_type == "HELLO":
@@ -135,16 +137,24 @@ def dispatch_message(msg, self_id, self_ip):
         # Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
         # Create a `pong` message using the function `create_pong` in `peer_manager.py`.
         # Send the `pong` message to the sender using the function `enqueue_message` in `outbox.py`.
+        
+        if msg["sender"] == self_id:
+            return
         update_peer_heartbeat(msg["sender"])
-        pong_msg = create_pong(msg["sender"], msg["timestamp"])
-        enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], pong_msg)
+        pong_msg = create_pong(self_id, msg["timestamp"])
+        target_ip, target_port = known_peers[msg["sender"]]
+        enqueue_message(msg["sender"], target_ip, target_port, pong_msg)
 
     #format in peer_manager.create_pong
     elif msg_type == "PONG":
         
         # Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
         # Call the function `handle_pong` in `peer_manager.py` to handle the message.
+        
+        print(f"🫵 {self_id} received pong from {msg['sender']}")
+        
         update_peer_heartbeat(msg["sender"])
+        update_peer_heartbeat(self_id)
         handle_pong(msg)
 
     #format in inv_message.create_inv
@@ -159,7 +169,8 @@ def dispatch_message(msg, self_id, self_ip):
         missing_block_ids = [block_id for block_id in rcv_block_ids if block_id not in local_block_ids]
         if missing_block_ids:
             getblock_msg = create_getblock(missing_block_ids, self_id)
-            enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], getblock_msg)
+            target_ip, target_port = known_peers[msg["sender"]]
+            enqueue_message(msg["sender"], target_ip, target_port, getblock_msg)
 
     #format in block_handler.create_getblock
     elif msg_type == "GETBLOCK":
@@ -177,8 +188,12 @@ def dispatch_message(msg, self_id, self_ip):
             # Send the `GETBLOCK` message to known peers using the function `enqueue_message` in `outbox.py`.
             else:
                 missing_block_ids.append(block_id)
-        get_block_msg = create_getblock(self_id, missing_block_ids)
-        enqueue_message(self_id, self_ip, peer_config[self_id][1], get_block_msg)
+        
+        for peer_id in known_peers:
+            if peer_id == self_id:
+                continue
+            get_block_msg = create_getblock(self_id, missing_block_ids)
+            enqueue_message(peer_id, peer_config[peer_id][0], peer_config[peer_id][1], get_block_msg)
         time.sleep(10)
 
         # Retry getting the blocks from the local blockchain. If the retry times exceed 3, drop the message.
@@ -188,8 +203,11 @@ def dispatch_message(msg, self_id, self_ip):
             # retry
             retry_cnt += 1
             print(f"get block retry {retry_cnt} times")
-            get_block_msg = create_getblock(self_id, missing_block_ids)
-            enqueue_message(self_id, self_ip, peer_config[self_id][1], get_block_msg)
+            for peer_id in known_peers:
+                if peer_id == self_id:
+                    continue
+                get_block_msg = create_getblock(self_id, missing_block_ids)
+                enqueue_message(peer_id, peer_config[peer_id][0], peer_config[peer_id][1], get_block_msg)
             time.sleep(10)
 
             # check if the blocks exist in the local blockchain
@@ -202,7 +220,7 @@ def dispatch_message(msg, self_id, self_ip):
 
         # If the blocks exist in the local blockchain, send the blocks one by one to the requester using the function `enqueue_message` in `outbox.py`.
         for block in ret_blocks:
-            enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], block)
+            enqueue_message(msg["sender"], peer_config[msg["sender"]][0], peer_config[msg["sender"]][1], block)
 
 
     #format in block_handler.request_block_sync
@@ -227,7 +245,7 @@ def dispatch_message(msg, self_id, self_ip):
         }
 
         # Send the `BLOCK_HEADERS` message to the requester using the function `enqueue_message` in `outbox.py`.
-        enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], block_headers_msg)
+        enqueue_message(msg["sender"], peer_config[msg["sender"]][0], peer_config[msg["sender"]][1], block_headers_msg)
     
     #format in this.dispatch_message
     elif msg_type == "BLOCK_HEADERS":
@@ -255,7 +273,7 @@ def dispatch_message(msg, self_id, self_ip):
                 
                 for block_id in missing_block_ids:
                     get_block_msg = create_getblock(self_id, [block_id])
-                    enqueue_message(msg["sender"], self_ip, peer_config[msg["sender"]][1], get_block_msg)
+                    enqueue_message(msg["sender"], peer_config[msg["sender"]][0], peer_config[msg["sender"]][1], get_block_msg)
 
         # If not, drop the message since there are orphaned blocks in the received message and, thus, the message is invalid.
         else:

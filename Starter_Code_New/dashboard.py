@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from threading import Thread
 from peer_manager import peer_status, rtt_tracker, blacklist
 from transaction import get_recent_transactions
-from link_simulator import rate_limiter
+# from link_simulator import rate_limiter
 from message_handler import get_redundancy_stats
 from peer_discovery import known_peers, peer_config, peer_flags
 import json
@@ -94,3 +94,28 @@ def blacklist_display():
     # 展示黑名单
     # blacklist: set or dict
     return jsonify(list(blacklist))
+
+
+# debug
+@app.route('/reachable')
+def disp_reachable():
+    from peer_discovery import reachable_by
+    out = {k: list(v) for k, v in reachable_by.items()}
+    return jsonify(out)
+
+@app.route('/peer_config')
+def disp_peer_config():
+    return jsonify(peer_config)
+
+@app.route('/known_peers')
+def disp_known_peers():
+    return jsonify(known_peers)
+
+@app.route('/peer_flags')
+def disp_peer_flags():
+    return jsonify(peer_flags)
+
+@app.route('/drop_stats')
+def disp_drop_stats():
+    from outbox import drop_stats
+    return jsonify(drop_stats)

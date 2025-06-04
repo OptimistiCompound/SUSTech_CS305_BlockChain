@@ -10,8 +10,9 @@ rtt_tracker = {} # {peer_id: transmission latency}
 
 # === Check if peers are alive ===
 
-def start_ping_loop(self_id, peer_table, interval=5):
+def start_ping_loop(self_id, peer_table, interval=15):
     from outbox import enqueue_message
+    from utils import generate_message_id
     def loop():
        while True:
             cur_time = time.time()
@@ -21,17 +22,20 @@ def start_ping_loop(self_id, peer_table, interval=5):
                 msg = {
                     "type": "PING",
                     "sender": self_id,
-                    "timestamp": cur_time
+                    "timestamp": cur_time,
+                    "message_id": generate_message_id()
                 }
                 enqueue_message(peer_id, ip, port, msg)
             time.sleep(interval)
     threading.Thread(target=loop, daemon=True).start()
 
 def create_pong(sender, recv_ts):
+    from utils import generate_message_id
     return {
         "type": "PONG",
         "sender": sender,
-        "timestamp": recv_ts
+        "timestamp": recv_ts,
+        "message_id": generate_message_id()
     }
 
 def handle_pong(msg):
