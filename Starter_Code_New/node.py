@@ -7,12 +7,12 @@ import time
 import traceback
 from peer_discovery import start_peer_discovery, known_peers, peer_flags, peer_config
 from block_handler import block_generation, request_block_sync
-#from message_handler import cleanup_seen_messages
+# from message_handler import cleanup_seen_messages
 from socket_server import start_socket_server
 from dashboard import start_dashboard
 from peer_manager import start_peer_monitor, start_ping_loop
 from outbox import send_from_queue
-#from link_simulator import start_dynamic_capacity_adjustment
+# from link_simulator import start_dynamic_capacity_adjustment
 from inv_message import broadcast_inventory
 from transaction import transaction_generation
 
@@ -44,7 +44,9 @@ def main():
     # 一开始，known_peers 只有自己
     for peer_id, peer_info in config["peers"].items():
         known_peers[peer_id] = (peer_info["ip"], peer_info["port"])
-        peer_config = config["peers"]
+
+    peer_config.clear()
+    peer_config.update({k: v.copy() for k, v in config["peers"].items()})
 
     if args.fanout:
         peer_config[self_id]["fanout"] = args.fanout
@@ -83,8 +85,8 @@ def main():
     print(f"[{self_id}] Starting outbound queue", flush=True)
     send_from_queue(self_id)
 
-    print(f"[{self_id}] Starting dynamic capacity adjustment", flush=True)
-    #start_dynamic_capacity_adjustment()
+    # print(f"[{self_id}] Starting dynamic capacity adjustment", flush=True)
+    # start_dynamic_capacity_adjustment()
 
     # Start dashboard
     time.sleep(2)
