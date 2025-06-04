@@ -10,19 +10,28 @@ def start_socket_server(self_id, self_ip, port):
 
     def listen_loop():
         # Create a TCP socket and bind it to the peer’s IP address and port.
-        peer_socket = peer_socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         peer_socket.bind((self_ip, port))
         peer_socket.listen()
         print(f"Listening on {self_ip}:{port}")
         # When receiving messages, pass the messages to the function `dispatch_message` in `message_handler.py`.
         while True:
             try:
-                msg = peer_socket.recv(RECV_BUFFER)
-                if msg:
-                    msg_dict = json.loads(msg)
-                    dispatch_message(msg_dict, self_id, self_ip)
+                conn, addr = peer_socket.accept()
+                with conn:  # 使用with确保连接正确关闭
+                    try:
+                        msg = conn.recv(RECV_BUFFER)
+                        if not msg:
+                            continue
+                        try:
+                            msg_dict = json.loads(msg)
+                            dispatch_message(msg_dict, self_id, self_ip)
+                        except json.JSONDecodeError:
+                            print(f"从{addr}接收到无效JSON数据")
+                    except Exception as e:
+                        print(f"❌ Error receiving message: {e} in peer {self_id} at {self_ip}:{port}")
             except Exception as e:
-                print(f"❌ Error receiving message: {e} in peer {self_id} at {self_ip}:{port}")
+                print(f"🔻 Error accepting connection: {e} in peer {self_id} at {self_ip}:{port}")
                 continue
 
     # ✅ Run listener in background

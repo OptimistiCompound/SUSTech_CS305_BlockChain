@@ -23,7 +23,7 @@ def request_block_sync(self_id):
     # 发送到所有已知节点
     for peer in known_peers:
         if peer != self_id:
-            enqueue_message(msg, peer)
+            enqueue_message(peer, known_peers[peer][0], known_peers[peer][1], msg)
 
 def block_generation(self_id, MALICIOUS_MODE, interval=20):
     from inv_message import create_inv
@@ -72,9 +72,12 @@ def compute_block_hash(block):
 def handle_block(msg, self_id):
     # 校验区块ID
     block_id = msg.get("block_id")
-    expected_hash = compute_block_hash(msg)
+    msg_without_id = msg.copy()
+    msg_without_id.pop("block_id", None)
+    expected_hash = compute_block_hash(msg_without_id)
     if block_id != expected_hash:
         record_offense(msg.get("peer_id"))
+        print(f"[{msg.get("peer_id")}] recorded in blacklist of {self_id}.")
         return
     # 是否已存在
     if any(b["block_id"] == block_id for b in received_blocks):
