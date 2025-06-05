@@ -60,7 +60,7 @@ def create_dummy_block(peer_id, MALICIOUS_MODE):
         block["block_id"] = compute_block_hash(block)
     # 清空交易池并存储区块
     clear_pool()
-    receive_block(block)
+    receive_block(block, peer_id)
     return block
 
 def compute_block_hash(block):
@@ -87,21 +87,22 @@ def handle_block(msg, self_id):
         orphan_blocks[block_id] = msg
         return False
     # 添加区块
-    receive_block(msg)
+    receive_block(msg, self_id)
     # 检查能否接回孤块
     to_remove = []
     for orphan_id, orphan_block in orphan_blocks.items():
         if orphan_block["previous_block_id"] == block_id:
-            receive_block(orphan_block)
+            receive_block(orphan_block, self_id)
             to_remove.append(orphan_id)
     for oid in to_remove:
         orphan_blocks.pop(oid, None)
     
     return True
 
-def receive_block(block):
+def receive_block(block, self_id):
     # 存储区块或区块头
-    if peer_config.get("type", "full") == "full":
+    is_light = peer_config[self_id].get("light", False)
+    if not is_light:
         received_blocks.append(block)
     else:
         header = {
@@ -121,7 +122,7 @@ def create_getblock(sender_id, requested_ids):
         "message_id": generate_message_id()
     }
 
-def get_block_by_id(block_id):
+def get_block_by_id(block_id)->dict:
     # 根据ID查找区块
     for block in received_blocks:
         if block["block_id"] == block_id:

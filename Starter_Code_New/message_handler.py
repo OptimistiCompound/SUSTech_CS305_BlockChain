@@ -68,7 +68,7 @@ def dispatch_message(msg, self_id, self_ip):
         print(f"[⚠️] {msg.get('sender', msg.get('from'))} is inbound limited, dropping message")
         return
     # Check if the sender exists in the `blacklist` of `peer_manager.py`. If yes, drop the message.
-    if msg["sender"] in blacklist:
+    if msg.get("sender", msg.get("from")) in blacklist:
         print(f"[⚠️] {msg['sender']} is in the blacklist, dropping message")
         return
 
@@ -133,8 +133,8 @@ def dispatch_message(msg, self_id, self_ip):
         # Create a `pong` message using the function `create_pong` in `peer_manager.py`.
         # Send the `pong` message to the sender using the function `enqueue_message` in `outbox.py`.
         
-        if msg["sender"] == self_id:
-            return
+        # if msg["sender"] == self_id:
+        #     return
         update_peer_heartbeat(msg["sender"])
         pong_msg = create_pong(self_id, msg["timestamp"])
         target_ip, target_port = known_peers[msg["sender"]]
@@ -169,57 +169,89 @@ def dispatch_message(msg, self_id, self_ip):
 
     #format in block_handler.create_getblock
     elif msg_type == "GETBLOCK":
-
         print(f"[{self_id}] Received GETBLOCK from {msg['sender']}, requesting blocks: {msg.get('block_ids', [])}")
 
-        # Extract the block IDs from the message.
         rcv_block_ids = msg.get("block_ids", [])
         ret_blocks = []
         missing_block_ids = []
-        for block_id in rcv_block_ids:
-            # Get the blocks from the local blockchain according to the block IDs using the function `get_block_by_id` in `block_handler.py`.
-            if block_id in received_blocks:
-                ret_blocks.append(get_block_by_id(block_id))
 
-            # If the blocks are not in the local blockchain, create a `GETBLOCK` message to request the missing blocks from known peers.
-            # Send the `GETBLOCK` message to known peers using the function `enqueue_message` in `outbox.py`.
+        # 1. 查找本地已有的区块
+        for block_id in rcv_block_ids:
+            block = get_block_by_id(block_id)
+            if block:
+                ret_blocks.append(block)
+                print(f"{self_id} Found block: {block_id}")
             else:
                 missing_block_ids.append(block_id)
-                print(f"[{self_id}] Missing blocks: {missing_block_ids}")
-        
-        for peer_id in known_peers:
-            if peer_id == self_id:
-                continue
-            get_block_msg = create_getblock(self_id, missing_block_ids)
-            enqueue_message(peer_id, peer_config[peer_id][0], peer_config[peer_id][1], get_block_msg)
-        time.sleep(10)
+                print(f"[{self_id}] Missing block: {block_id}")
 
-        # Retry getting the blocks from the local blockchain. If the retry times exceed 3, drop the message.
-        retry_cnt = 0
-        found_block = []
-        while missing_block_ids and retry_cnt < 3:
-            # retry
-            retry_cnt += 1
-            print(f"get block retry {retry_cnt} times")
+        # 2. 发送本地已有区块
+        for block in ret_blocks:
+            try:
+                # 检查序列化
+                json.dumps(block)
+            except Exception as e:
+                print(f"[{self_id}] Block not serializable: {e}, block={block}")
+                continue
+            print(f"Sending BLOCK: {block['block_id']}")
+
+            try:
+                sender = msg["sender"]
+            except Exception as e:
+                print(f"🆘 Exception in Key")
+            try:
+                print(f"enqueue_message参数: sender={msg.get('sender')}, peer_config={peer_config.get(msg.get('sender'))}")
+                enqueue_message(
+                    sender,
+                    peer_config.get(sender)["ip"],
+                    peer_config.get(sender)["port"],
+                    block
+                )
+            except Exception as e:
+                print(f"🆘 Error calling enqueue_message: {e}, msg={msg}, peer_config_keys={list(peer_config.keys())}")
+            
+
+        # 3. 如果有缺失区块，向其他 peer 请求
+        if missing_block_ids:
             for peer_id in known_peers:
                 if peer_id == self_id:
                     continue
                 get_block_msg = create_getblock(self_id, missing_block_ids)
-                enqueue_message(peer_id, peer_config[peer_id][0], peer_config[peer_id][1], get_block_msg)
-            time.sleep(10)
+                enqueue_message(peer_id, peer_config[peer_id]["ip"], peer_config[peer_id]["port"], get_block_msg)
 
-            # check if the blocks exist in the local blockchain
-            for block_id in missing_block_ids:
-                if block_id in received_blocks:
-                    ret_blocks.append(get_block_by_id(block_id))
-                    found_block.append(block_id)
-            for block_id in found_block:
-                missing_block_ids.remove(block_id)
-        
-        # If the blocks exist in the local blockchain, send the blocks one by one to the requester using the function `enqueue_message` in `outbox.py`.
-        for block in ret_blocks:
-            print(f"Sending BLOCK: {block}")
-            enqueue_message(msg["sender"], peer_config[msg["sender"]][0], peer_config[msg["sender"]][1], block)
+            # 4. 最多重试3次，每次等待10秒
+            retry_cnt = 0
+            while missing_block_ids and retry_cnt < 3:
+                retry_cnt += 1
+                print(f"[{self_id}] get block retry {retry_cnt} times, missing: {missing_block_ids}")
+                time.sleep(10)
+                found_block_ids = []
+                for block_id in missing_block_ids:
+                    block = get_block_by_id(block_id)
+                    if block:
+                        try:
+                            json.dumps(block)
+                        except Exception as e:
+                            print(f"[{self_id}] Block not serializable: {e}, block={block}")
+                            continue
+                        print(f"Sending BLOCK: {block['block_id']}")
+                        enqueue_message(
+                            msg["sender"],
+                            peer_config[msg["sender"]]["ip"],
+                            peer_config[msg["sender"]]["port"],
+                            block
+                        )
+                        found_block_ids.append(block_id)
+                # 移除已找到的区块
+                for block_id in found_block_ids:
+                    missing_block_ids.remove(block_id)
+                # 继续向其他 peer 请求剩余的
+                if missing_block_ids:
+                    for peer_id in known_peers:
+                        if peer_id == self_id:
+                            continue
+                        get_block_msg = create_getblock(self_id, missing_block_ids)
+                        enqueue_message(peer_id, peer_config[peer_id]["ip"], peer_config[peer_id]["port"], get_block_msg)
 
 
     #format in block_handler.request_block_sync
@@ -244,7 +276,7 @@ def dispatch_message(msg, self_id, self_ip):
         }
 
         # Send the `BLOCK_HEADERS` message to the requester using the function `enqueue_message` in `outbox.py`.
-        enqueue_message(msg["sender"], peer_config[msg["sender"]][0], peer_config[msg["sender"]][1], block_headers_msg)
+        enqueue_message(msg["sender"], peer_config[msg["sender"]]["ip"], peer_config[msg["sender"]]["port"], block_headers_msg)
     
     #format in this.dispatch_message
     elif msg_type == "BLOCK_HEADERS":
@@ -272,7 +304,7 @@ def dispatch_message(msg, self_id, self_ip):
                 
                 for block_id in missing_block_ids:
                     get_block_msg = create_getblock(self_id, [block_id])
-                    enqueue_message(msg["sender"], peer_config[msg["sender"]][0], peer_config[msg["sender"]][1], get_block_msg)
+                    enqueue_message(msg["sender"], peer_config[msg["sender"]]["ip"], peer_config[msg["sender"]]["port"], get_block_msg)
 
         # If not, drop the message since there are orphaned blocks in the received message and, thus, the message is invalid.
         else:

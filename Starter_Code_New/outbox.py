@@ -69,8 +69,6 @@ rate_limiter = RateLimiter()
 def enqueue_message(target_id, ip, port, message):
     from peer_manager import blacklist, rtt_tracker
 
-    '''Why rtt_tracker is not used?'''
-
     # Check if the peer sends message to the receiver too frequently using the function `is_rate_limited`. If yes, drop the message.
     # Check if the receiver exists in the `blacklist`. If yes, drop the message.
     # Classify the priority of the sending messages based on the message type using the function `classify_priority`.
@@ -155,6 +153,7 @@ def send_from_queue(self_id):
                 if not success:
                     if retries[target_id] < MAX_RETRIES:
                         retries[target_id] += 1
+                        print(f"Retrying: {retries[target_id]}/3")
                         time.sleep(RETRY_INTERVAL)
                         enqueue_message(target_id, ip, port, message)
                     else:
@@ -243,7 +242,7 @@ def send_message(ip, port, message):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((ip, port))
-        sock.sendall(json.dumps(message).encode())
+        sock.sendall((json.dumps(message) + "\n").encode())
         #print(f"Sent message to {ip}:{port}: {message}")
         sock.close()
         return True
