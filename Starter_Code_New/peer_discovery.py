@@ -88,12 +88,8 @@ def handle_hello_message(msg, self_id):
         new_peers.append(sender_id)
 
     # Update the set of reachable peers (`reachable_by`).
-    if sender_id not in reachable_by:
-        reachable_by[sender_id] = set()
-    if self_id not in reachable_by:
-        reachable_by[self_id] = set()
-    reachable_by[sender_id].add(self_id)
-    reachable_by[self_id].add(sender_id)    
+    if sender_id not in reachable_by[self_id]:
+        reachable_by[self_id].add(sender_id)
 
     return new_peers 
 
