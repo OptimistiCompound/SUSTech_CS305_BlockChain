@@ -61,7 +61,7 @@ def transaction_generation(self_id, interval=15):
             tx = TransactionMessage(self_id, to_peer, amount)
             add_transaction(tx)  # 加入本地交易池
             # 广播交易到所有已知节点
-            gossip_message(tx.to_dict(), [peer for peer in known_peers if peer != self_id])
+            gossip_message([peer for peer in known_peers if peer != self_id], tx.to_dict())
             time.sleep(interval)
     threading.Thread(target=loop, daemon=True).start()
 

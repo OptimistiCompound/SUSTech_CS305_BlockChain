@@ -62,9 +62,7 @@ def latency():
 
 @app.route('/capacity')
 def capacity():
-    # 展示本节点发送能力
-    # rate_limiter.capacity 当前允许的速率
-    return jsonify({"capacity": getattr(rate_limiter, "capacity", None)})
+    pass
 
 @app.route('/orphans')
 def orphan_blocks():

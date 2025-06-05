@@ -23,4 +23,4 @@ def broadcast_inventory(self_id):
     inv_msg = create_inv(get_inventory(), self_id)
     # known_peers是dict，取所有peer_id，排除自己
     peer_ids = [peer_id for peer_id in known_peers if peer_id != self_id]
-    gossip_message(inv_msg, peer_ids)
+    gossip_message(peer_ids, inv_msg)

@@ -10,7 +10,7 @@ from block_handler import block_generation, request_block_sync
 # from message_handler import cleanup_seen_messages
 from socket_server import start_socket_server
 from dashboard import start_dashboard
-from peer_manager import start_peer_monitor, start_ping_loop
+from peer_manager import start_peer_monitor, start_ping_loop, rtt_tracker
 from outbox import send_from_queue
 # from link_simulator import start_dynamic_capacity_adjustment
 from inv_message import broadcast_inventory
@@ -44,6 +44,15 @@ def main():
     # 一开始，known_peers 只有自己
     for peer_id, peer_info in config["peers"].items():
         known_peers[peer_id] = (peer_info["ip"], peer_info["port"])
+        peer_flags[peer_id] = {
+            "nat": peer_info.get("nat", False),
+            "light": peer_info.get("light", False)
+        }
+        peer_config[peer_id] = peer_info
+    
+    for peer_id in known_peers:
+        if peer_id not in rtt_tracker:
+            rtt_tracker[peer_id] = float('inf')  # Initialize RTT to infinity for all known peers
 
     peer_config.clear()
     peer_config.update({k: v.copy() for k, v in config["peers"].items()})

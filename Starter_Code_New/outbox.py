@@ -244,7 +244,7 @@ def send_message(ip, port, message):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((ip, port))
         sock.sendall(json.dumps(message).encode())
-        print(f"Sent message to {ip}:{port}: {message}")
+        #print(f"Sent message to {ip}:{port}: {message}")
         sock.close()
         return True
     except Exception as e:

@@ -112,7 +112,7 @@ def dispatch_message(msg, self_id, self_ip):
         inv_msg = create_inv(msg["block_id"], self_id)
 
         # Broadcast the `INV` message to known peers using the function `gossip_message` in `outbox.py`.
-        gossip_message(inv_msg, self_id)
+        gossip_message(self_id, inv_msg)
 
     #format in transaction.start_transaction_generation
     elif msg_type == "TX":
@@ -129,7 +129,7 @@ def dispatch_message(msg, self_id, self_ip):
         add_transaction(tx)
 
         # Broadcast the transaction to known peers using the function `gossip_message` in `outbox.py`.
-        gossip_message(msg, self_id)
+        gossip_message(self_id, msg)
 
     #format in peer_manager.start_ping_loop
     elif msg_type == "PING":
@@ -151,7 +151,7 @@ def dispatch_message(msg, self_id, self_ip):
         # Update the last ping time using the function `update_peer_heartbeat` in `peer_manager.py`.
         # Call the function `handle_pong` in `peer_manager.py` to handle the message.
         
-        print(f"🫵 {self_id} received pong from {msg['sender']}")
+        #print(f"🫵 {self_id} received pong from {msg['sender']}")
         
         update_peer_heartbeat(msg["sender"])
         update_peer_heartbeat(self_id)
@@ -168,7 +168,7 @@ def dispatch_message(msg, self_id, self_ip):
         rcv_block_ids = msg.get("block_ids", [])
         missing_block_ids = [block_id for block_id in rcv_block_ids if block_id not in local_block_ids]
         if missing_block_ids:
-            getblock_msg = create_getblock(missing_block_ids, self_id)
+            getblock_msg = create_getblock(self_id, missing_block_ids)
             target_ip, target_port = known_peers[msg["sender"]]
             enqueue_message(msg["sender"], target_ip, target_port, getblock_msg)
 
