@@ -42,12 +42,13 @@ def create_dummy_block(peer_id, MALICIOUS_MODE):
     # 获取交易
     txs = get_recent_transactions()
     if not txs:
+        print(f"No transactions to include in block from {peer_id}")
         return None
     # 上一个区块ID
     prev_block_id = received_blocks[-1]["block_id"] if received_blocks else "GENESIS"
     block = {
         "type": "BLOCK",
-        "peer_id": peer_id,
+        "sender": peer_id,
         "timestamp": time.time(),
         "previous_block_id": prev_block_id,
         "transactions": txs
@@ -72,21 +73,19 @@ def compute_block_hash(block):
 def handle_block(msg, self_id):
     # 校验区块ID
     block_id = msg.get("block_id")
-    msg_without_id = msg.copy()
-    msg_without_id.pop("block_id", None)
-    expected_hash = compute_block_hash(msg_without_id)
+    expected_hash = compute_block_hash(msg)
     if block_id != expected_hash:
-        record_offense(msg.get("peer_id"))
-        print(f"[{msg.get('peer_id')}] recorded in blacklist of {self_id}.")
-        return
+        record_offense(msg.get("sender"))
+        print(f"Invalid block ID {block_id} from {msg.get('sender')}, expected {expected_hash}")
+        return False
     # 是否已存在
     if any(b["block_id"] == block_id for b in received_blocks):
-        return
+        return False
     # 上一个区块是否存在
     prev_id = msg.get("previous_block_id")
     if prev_id != "GENESIS" and not any(b["block_id"] == prev_id for b in received_blocks):
         orphan_blocks[block_id] = msg
-        return
+        return False
     # 添加区块
     receive_block(msg)
     # 检查能否接回孤块
@@ -97,6 +96,8 @@ def handle_block(msg, self_id):
             to_remove.append(orphan_id)
     for oid in to_remove:
         orphan_blocks.pop(oid, None)
+    
+    return True
 
 def receive_block(block):
     # 存储区块或区块头
@@ -104,7 +105,7 @@ def receive_block(block):
         received_blocks.append(block)
     else:
         header = {
-            "peer_id": block["peer_id"],
+            "sender": block["sender"],
             "timestamp": block["timestamp"],
             "block_id": block["block_id"],
             "previous_block_id": block["previous_block_id"]
@@ -116,7 +117,8 @@ def create_getblock(sender_id, requested_ids):
     return {
         "type": "GETBLOCK",
         "sender": sender_id,
-        "block_ids": requested_ids
+        "block_ids": requested_ids,
+        "message_id": generate_message_id()
     }
 
 def get_block_by_id(block_id):

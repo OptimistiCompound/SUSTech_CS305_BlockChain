@@ -51,21 +51,25 @@ def get_redundancy_stats():
 def dispatch_message(msg, self_id, self_ip):
     global message_redundancy
     msg_type = msg.get("type")
-    message_id = msg.get("message_id", msg.get("block_id", msg.get("tx_id")))
+    message_id = msg.get("message_id", msg.get("block_id", msg.get("tx_id", "UNKNOWN")))
 
     ''' Read the message. '''
 
     # Check if the message has been seen in `seen_message_ids` to prevent replay attacks. If yes, drop the message and add one to `message_redundancy`. If not, add the message ID to `seen_message_ids`.
     if message_id in seen_message_ids:
         message_redundancy += 1
+        print(f"[{self_id}] Message {message_id} already seen, dropping message")
         return
     else:
-        seen_message_ids[message_id] = time.time()
+        if message_id != "UNKNOWN": 
+            seen_message_ids[message_id] = time.time()
     # Check if the sender sends message too frequently using the function `is_inbound_limited`. If yes, drop the message.
-    if is_inbound_limited(msg["sender"]):
+    if is_inbound_limited(msg.get("sender", msg.get("from"))):
+        print(f"[⚠️] {msg.get('sender', msg.get('from'))} is inbound limited, dropping message")
         return
     # Check if the sender exists in the `blacklist` of `peer_manager.py`. If yes, drop the message.
     if msg["sender"] in blacklist:
+        print(f"[⚠️] {msg['sender']} is in the blacklist, dropping message")
         return
 
     #format in outbox.relay_or_direct_send
@@ -89,27 +93,17 @@ def dispatch_message(msg, self_id, self_ip):
 
     #format in block_handler.block_generation
     elif msg_type == "BLOCK":
-        from block_handler import compute_block_hash
 
         # Check the correctness of block ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
-        block_without_id = {
-            "type": "BLOCK",
-            "peer_id": msg["peer_id"],
-            "timestamp": msg["timestamp"],
-            "previous_block_id": msg["previous_block_id"],
-            "transactions": msg["transactions"]
-        }
-        rcv_block_id = msg["block_id"]
-        calc_blcok_id = compute_block_hash(block_without_id)
-        if rcv_block_id != calc_blcok_id:
-            record_offense(msg["peer_id"])
+        # Call the function `handle_block` in `block_handler.py` to process the block.
+        success = handle_block(msg, self_id)
+
+        if not success:
+            print(f"[{self_id}] block message drop.")
             return
 
-        # Call the function `handle_block` in `block_handler.py` to process the block.
-        handle_block(msg, self_id)
-
         # Call the function `create_inv` to create an `INV` message for the block.
-        inv_msg = create_inv(msg["block_id"], self_id)
+        inv_msg = create_inv([msg["block_id"]], self_id)
 
         # Broadcast the `INV` message to known peers using the function `gossip_message` in `outbox.py`.
         gossip_message(self_id, inv_msg)
@@ -118,11 +112,12 @@ def dispatch_message(msg, self_id, self_ip):
     elif msg_type == "TX":
         from transaction import TransactionMessage
         # Check the correctness of transaction ID. If incorrect, record the sender's offence using the function `record_offence` in `peer_manager.py`.
-        rcv_tx_id = msg["id"]
+        rcv_tx_id = msg["tx_id"]
         tx = TransactionMessage(msg["from"], msg["to"], msg["amount"], msg["timestamp"])
         calc_tx_id = tx.compute_hash()
         if rcv_tx_id!= calc_tx_id:
             record_offense(msg["from"])
+            print(f"[{self_id}] Invalid transaction ID {rcv_tx_id}, expected {calc_tx_id}. Offense recorded.")
             return
 
         # Add the transaction to `tx_pool` using the function `add_transaction` in `transaction.py`.
@@ -174,7 +169,9 @@ def dispatch_message(msg, self_id, self_ip):
 
     #format in block_handler.create_getblock
     elif msg_type == "GETBLOCK":
-        
+
+        print(f"[{self_id}] Received GETBLOCK from {msg['sender']}, requesting blocks: {msg.get('block_ids', [])}")
+
         # Extract the block IDs from the message.
         rcv_block_ids = msg.get("block_ids", [])
         ret_blocks = []
@@ -188,6 +185,7 @@ def dispatch_message(msg, self_id, self_ip):
             # Send the `GETBLOCK` message to known peers using the function `enqueue_message` in `outbox.py`.
             else:
                 missing_block_ids.append(block_id)
+                print(f"[{self_id}] Missing blocks: {missing_block_ids}")
         
         for peer_id in known_peers:
             if peer_id == self_id:
@@ -217,9 +215,10 @@ def dispatch_message(msg, self_id, self_ip):
                     found_block.append(block_id)
             for block_id in found_block:
                 missing_block_ids.remove(block_id)
-
+        
         # If the blocks exist in the local blockchain, send the blocks one by one to the requester using the function `enqueue_message` in `outbox.py`.
         for block in ret_blocks:
+            print(f"Sending BLOCK: {block}")
             enqueue_message(msg["sender"], peer_config[msg["sender"]][0], peer_config[msg["sender"]][1], block)
 
 
@@ -230,7 +229,7 @@ def dispatch_message(msg, self_id, self_ip):
         headers = []
         for block in received_blocks:
             header = {
-                "peer_id": block["peer_id"],
+                "sender": block["sender"],
                 "timestamp": block["timestamp"],
                 "block_id": block["block_id"],
                 "previous_block_id": block["previous_block_id"]

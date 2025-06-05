@@ -20,14 +20,17 @@ def start_socket_server(self_id, self_ip, port):
                 conn, addr = peer_socket.accept()
                 with conn:  # 使用with确保连接正确关闭
                     try:
-                        msg = conn.recv(RECV_BUFFER)
-                        if not msg:
-                            continue
-                        try:
-                            msg_dict = json.loads(msg)
-                            dispatch_message(msg_dict, self_id, self_ip)
-                        except json.JSONDecodeError:
-                            print(f"从{addr}接收到无效JSON数据")
+                        # 用文件对象逐行读取
+                        f = conn.makefile()
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                msg_dict = json.loads(line)
+                                dispatch_message(msg_dict, self_id, self_ip)
+                            except json.JSONDecodeError:
+                                print(f"从{addr}接收到无效JSON数据: {line}")
                     except Exception as e:
                         print(f"❌ Error receiving message: {e} in peer {self_id} at {self_ip}:{port}")
             except Exception as e:

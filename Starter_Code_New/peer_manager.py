@@ -74,5 +74,6 @@ peer_offense_counts = defaultdict(int) # The offence times of peers
 def record_offense(peer_id):
     peer_offense_counts[peer_id] += 1
     # Add a peer to `blacklist` if its offence times exceed 3.
-    if peer_offense_counts[peer_id] > 3:
+    if peer_offense_counts[peer_id] > 0:
         blacklist.add(peer_id)
+        print(f"[{peer_id}] has been added to the blacklist due to repeated offenses.")

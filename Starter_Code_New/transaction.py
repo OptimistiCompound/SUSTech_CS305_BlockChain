@@ -28,7 +28,7 @@ class TransactionMessage:
     def to_dict(self):
         return {
             "type": self.type,
-            "id": self.id,
+            "tx_id": self.id,
             "from": self.from_peer,
             "to": self.to_peer,
             "amount": self.amount,
