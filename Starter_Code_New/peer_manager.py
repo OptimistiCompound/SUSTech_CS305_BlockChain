@@ -47,7 +47,7 @@ def handle_pong(msg):
         rtt_tracker[sender] = rtt
         update_peer_heartbeat(sender)
 
-def start_peer_monitor(timeout  = 10, check_interval = 2):
+def start_peer_monitor(timeout  = 25, check_interval = 2):
     import threading
     def loop():
         while True:
