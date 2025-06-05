@@ -21,7 +21,7 @@ def start_peer_discovery(self_id, self_info):
         localnetworkid = self_info.get("localnetworkid", -1)
         hello_msg = {
             "type": "HELLO",
-            "sender_id": self_id,
+            "sender": self_id,
             "ip": self_ip,
             "port": self_port,
             "flags": {
@@ -68,12 +68,12 @@ def start_peer_discovery(self_id, self_info):
     threading.Thread(target=loop, daemon=True).start()
 
 def handle_hello_message(msg, self_id):
-    print(f"🤗 Received hello message from {msg['sender_id']}")
+    print(f"🤗 Received hello message from {msg['sender']}")
 
     new_peers = []
     
     # Read information in the received `hello` message.
-    sender_id = msg["sender_id"]
+    sender_id = msg["sender"]
     sender_ip = msg["ip"]
     sender_port = msg["port"]
     sender_nat, sender_light = msg["flags"]["nat"], msg["flags"]["light"]
