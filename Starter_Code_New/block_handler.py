@@ -34,7 +34,7 @@ def block_generation(self_id, MALICIOUS_MODE, interval=20):
             if block is not None:
                 # 生成INV消息并广播
                 inv_msg = create_inv([block["block_id"]], self_id)
-                gossip_message(inv_msg, [peer for peer in known_peers if peer != self_id])
+                gossip_message([peer for peer in known_peers if peer != self_id], inv_msg)
             time.sleep(interval)
     threading.Thread(target=mine, daemon=True).start()
 
@@ -77,7 +77,7 @@ def handle_block(msg, self_id):
     expected_hash = compute_block_hash(msg_without_id)
     if block_id != expected_hash:
         record_offense(msg.get("peer_id"))
-        print(f"[{msg.get("peer_id")}] recorded in blacklist of {self_id}.")
+        print(f"[{msg.get('peer_id')}] recorded in blacklist of {self_id}.")
         return
     # 是否已存在
     if any(b["block_id"] == block_id for b in received_blocks):
