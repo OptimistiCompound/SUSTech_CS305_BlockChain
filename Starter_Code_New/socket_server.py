@@ -11,6 +11,7 @@ def start_socket_server(self_id, self_ip, port):
     def listen_loop():
         # Create a TCP socket and bind it to the peer’s IP address and port.
         peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        peer_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         peer_socket.bind((self_ip, port))
         peer_socket.listen()
         print(f"Listening on {self_ip}:{port}")
@@ -18,6 +19,7 @@ def start_socket_server(self_id, self_ip, port):
         while True:
             try:
                 conn, addr = peer_socket.accept()
+                conn.settimeout(10)  # 防止死等
                 with conn:  # 使用with确保连接正确关闭
                     try:
                         # 用文件对象逐行读取

@@ -65,7 +65,7 @@ def capacity():
     pass
 
 @app.route('/orphans')
-def orphan_blocks():
+def view_orphan_blocks():
     # 展示孤块池 orphan_blocks: dict
     # 转为 list
     return jsonify(list(orphan_blocks.values()))
