@@ -8,7 +8,7 @@
 ||工作|
 |:-:|:-:|
 |钟庸   | socket_server.py, peer_discovery.py, outbox.py, message_handler.py |
-|陈佳林 | peer_manager.py, block_handler.py, inv_message.py, dashboard.py |
+|陈佳林 | peer_manager.py, block_handler.py, inv_message.py, transaction.py, dashboard.py |
 |倪汇智 | |
 
 ## 各模块实现
@@ -104,7 +104,49 @@ def handle_hello_message(msg, self_id):
 
 ### `Peer_manager.py`
 
-主要作用是向其他节点发送 PING 消息，告诉其他节点自己存活，并向对方确认对方是否存活或者是否可达。如果收到对方的 PONG 消息，说明对方存活。
+该模块负责监控各节点存活状态、管理 RTT 延迟信息，并实现简单的黑名单封禁机制。
+
+主要功能：
+
+- `start_ping_loop(self_id, peer_table, interval=15)`：周期性向所有已知节点发送 PING 消息，检测节点是否在线。
+- `handle_pong(msg)`：收到 PONG 响应后，测量 RTT 延迟并更新节点活性状态。
+- `start_peer_monitor(timeout=10, check_interval=2)`：定时检测节点是否超时未响应，及时将失联节点标记为 "UNREACHABLE"。
+- 黑名单机制：统计恶意行为（如非法区块），超过阈值自动将节点加入黑名单，确保网络安全与健壮性。
+
+```python
+def start_ping_loop(self_id, peer_table, interval=15):
+    def loop():
+       while True:
+            cur_time = time.time()
+            for peer_id, (ip, port) in peer_table.items():
+                if peer_id == self_id:
+                    continue
+                msg = {
+                    "type": "PING",
+                    "sender": self_id,
+                    "timestamp": cur_time,
+                    "message_id": generate_message_id()
+                }
+                enqueue_message(peer_id, ip, port, msg)
+            time.sleep(interval)
+    threading.Thread(target=loop, daemon=True).start()
+
+def handle_pong(msg):
+    sender = msg.get("sender")
+    sent_ts = msg.get("timestamp")
+    now = time.time()
+    if sender is not None and sent_ts is not None:
+        rtt = now - sent_ts
+        rtt_tracker[sender] = rtt
+        update_peer_heartbeat(sender)
+```
+```python
+def record_offense(peer_id):
+    peer_offense_counts[peer_id] += 1
+    if peer_offense_counts[peer_id] > 0:
+        blacklist.add(peer_id)
+        print(f"[{peer_id}] has been added to the blacklist due to repeated offenses.")
+```
 
 
 
@@ -131,19 +173,110 @@ def block_generation(self_id, MALICIOUS_MODE, interval=20):
             time.sleep(interval)
     threading.Thread(target=mine, daemon=True).start()
 ```
+```python
+def handle_block(msg, self_id):
+    block_id = msg.get("block_id")
+    expected_hash = compute_block_hash(msg)
+    if block_id != expected_hash:
+        record_offense(msg.get("sender"))
+        print(f"Invalid block ID {block_id} from {msg.get('sender')}, expected {expected_hash}")
+        return False
+    if any(b["block_id"] == block_id for b in received_blocks):
+        return False
+    prev_id = msg.get("previous_block_id")
+    if prev_id != "GENESIS" and not any(b["block_id"] == prev_id for b in received_blocks):
+        orphan_blocks[block_id] = msg
+        return False
+    receive_block(msg)
+    return True
+```
 
 ### `transaction.py`
 
-主要负责生成交易和验证交易。包含了一个`TransactionMessage`类，用于表示交易消息。
-- `transaction_generation` 函数用于生成一个新的交易。
+该模块负责生成、验证交易，并维护本地交易池。
 
-还负责维护本地的交易池 `tx_pool`，用于存储待广播的交易。
+主要功能：
+
+- `TransactionMessage` 类：封装了交易的各项属性（发送者、接收者、金额、时间戳、唯一哈希 ID 等），便于序列化和网络传输。
+- `transaction_generation(self_id, interval=15)`：周期性自动生成并广播新的交易消息，每隔一定时间随机生成一次，模拟真实网络的交易流量。
+- `add_transaction(tx)`：去重后将新交易加入本地交易池。
+- `get_recent_transactions()`：返回交易池内所有交易的字典列表，用于状态展示与区块打包。
+- `clear_pool()`：打包新区块后清空交易池。
+
+```python
+class TransactionMessage:
+    def __init__(self, sender, receiver, amount, timestamp=None):
+        self.type = "TX"
+        self.from_peer = sender
+        self.to_peer = receiver
+        self.amount = amount
+        self.timestamp = timestamp if timestamp else time.time()
+        self.id = self.compute_hash()
+    def compute_hash(self):
+        tx_data = {
+            "type": self.type,
+            "from": self.from_peer,
+            "to": self.to_peer,
+            "amount": self.amount,
+            "timestamp": self.timestamp
+        }
+        return hashlib.sha256(json.dumps(tx_data, sort_keys=True).encode()).hexdigest()
+    def to_dict(self):
+        return {
+            "type": self.type,
+            "tx_id": self.id,
+            "from": self.from_peer,
+            "to": self.to_peer,
+            "amount": self.amount,
+            "timestamp": self.timestamp
+        }
+```
+```python
+def transaction_generation(self_id, interval=15):
+    def loop():
+        while True:
+            candidates = [peer for peer in known_peers if peer != self_id]
+            if not candidates:
+                time.sleep(interval)
+                continue
+            to_peer = random.choice(candidates)
+            amount = random.randint(1, 100)
+            tx = TransactionMessage(self_id, to_peer, amount)
+            add_transaction(tx)
+            gossip_message([peer for peer in known_peers if peer != self_id], tx.to_dict())
+            time.sleep(interval)
+    threading.Thread(target=loop, daemon=True).start()
+```
+
 
 ### `inv_message.py`
-主要负责生成广播消息。本地生成交易后需要向别的 peer 广播 INV 消息。
-维护 INV 消息的生成和处理。包含了一个`InvMessage`类，用于表示 INV 消息。
-- `create_inv` 函数用于生成一个 INV 消息。
-- `handle_inv` 函数用于接收 INV 消息，将其添加到 `received_inv` 列表中。如果收到同一个peer的不合法消息超过3个，将其记作恶意节点。
+
+该模块负责区块链网络中区块广播、同步的 INV 消息机制。
+
+主要功能如下：
+
+- `create_inv(block_ids, sender_id)`：根据给定的区块 ID 列表和发送者 ID 构建 INV 消息（格式为字典），用于通知其他节点有新块可同步。
+- `get_inventory()`：返回本节点已持有的所有区块 ID 列表。
+- `broadcast_inventory(self_id)`：自动构建 INV 消息并向所有其他已知节点广播，告知新获得的区块信息，实现区块间的快速同步。
+
+**实现要点：**
+- 利用 `gossip_message()` 完成消息的广播，自动排除自身节点，保证消息只发送给其他节点。
+- 与区块生成、区块请求等模块协同，实现区块链主链的全网同步。
+
+```python
+def create_inv(block_ids, sender_id):
+    return {
+        "type": "INV",
+        "sender": sender_id,
+        "block_ids": block_ids,
+        "message_id": generate_message_id()
+    }
+
+def broadcast_inventory(self_id):
+    inv_msg = create_inv(get_inventory(), self_id)
+    peer_ids = [peer_id for peer_id in known_peers if peer_id != self_id]
+    gossip_message(peer_ids, inv_msg)
+```
 
 
 ## Part 4: Sending Message Processing (outbox.py)
@@ -161,6 +294,28 @@ def block_generation(self_id, MALICIOUS_MODE, interval=20):
 此外，通过维护 seen_message_ids，seen_txs，redundant_blocks，redundant_txs，message_redundancy，处理重复接受的消息。并且通过`is_inbound_limited`方法，限制消息接收的速度
 
 
+## Part 6: Dashboard 可视化面板 (`dashboard.py`)
+
+该模块基于 Flask 实现，为模拟区块链网络提供实时可视化界面。通过访问 HTTP 接口，用户可以直观地查看区块链、节点、交易、消息队列等关键信息，便于调试、观测网络状态和性能。
+
+主要功能接口如下：
+
+- `/`：首页，展示项目基本信息。
+- `/blocks`：展示本节点已接收的区块链内容（`received_blocks`）。
+- `/peers`：展示所有已知节点的详细信息，包括 NAT/Light 节点标记、状态等。
+- `/transactions`：展示本地交易池当前所有交易。
+- `/latency`：展示与其他节点的 RTT（延迟）信息，便于分析网络延迟状况。
+- `/capacity`：预留接口，可用于后续扩展展示带宽或吞吐量等信息。
+- `/orphans`：展示孤块池 orphan_blocks，便于追踪未被主链接收的区块。
+- `/queue`：展示消息队列队列内容，按节点和优先级分类。
+- `/redundancy`：展示冗余消息统计，通过调用 `get_redundancy_stats()` 获取信息。
+- `/blacklist`：展示黑名单，便于观测恶意节点的封禁情况。
+
+此外还提供了若干 debug 接口，如 `/reachable`、`/peer_config`、`/known_peers`、`/peer_flags`、`/drop_stats` 等，用于调试和展示网络内部状态。
+
 
 ## 运行说明
 
+1. 使用 `docker compose up --build` 启动所有节点，每个节点运行在独立容器内。
+2. 节点自动完成初始化、发现、消息收发、区块与交易生成。
+3. 通过访问各节点 `localhost:port` 下不同接口，观察区块链、交易池、队列、节点状态等实时数据。
