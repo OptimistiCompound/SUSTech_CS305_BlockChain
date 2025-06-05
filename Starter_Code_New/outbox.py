@@ -7,8 +7,8 @@ from collections import defaultdict, deque
 from threading import Lock
 
 # === Per-peer Rate Limiting ===
-RATE_LIMIT = 10  # max messages
-TIME_WINDOW = 10  # per seconds
+RATE_LIMIT = 100  # max messages
+TIME_WINDOW = 5  # per seconds
 peer_send_timestamps = defaultdict(list) # the timestamps of sending messages to each peer
 
 MAX_RETRIES = 3
@@ -22,7 +22,7 @@ PRIORITY_LOW = {"RELAY"}
 
 DROP_PROB = 0.05
 LATENCY_MS = (20, 100)
-SEND_RATE_LIMIT = 5  # messages per second
+SEND_RATE_LIMIT = 100  # messages per second
 
 drop_stats = {
     "BLOCK": 0,
@@ -166,7 +166,7 @@ def send_from_queue(self_id):
     threading.Thread(target=worker, daemon=True).start()
 
 def relay_or_direct_send(self_id, dst_id, message):
-    from peer_discovery import known_peers, peer_flags
+    from peer_discovery import known_peers, peer_flags, reachable_by
     from utils import generate_message_id
 
     if message["type"] == "HELLO":
@@ -179,10 +179,11 @@ def relay_or_direct_send(self_id, dst_id, message):
     # Define the JSON format of a `RELAY` message, which should include `{message type, sender's ID, target peer's ID, `payload`}`. 
     # `payload` is the sending message. 
     # Send the `RELAY` message to the best relaying peer using the function `send_message`.
+    if self_id in reachable_by[dst_id]:
+        return send_message(known_peers[dst_id][0], known_peers[dst_id][1], message)
     if nat:
-        relay_peer = get_relay_peer(self_id, dst_id)
+        relay_peer = get_relay_peer(self_id, dst_id) # (peer_id, ip, port) or None
         if relay_peer:
-            # print(f"🟡 Sending RELAY to {relay_peer[0]}")
             relay_msg = {
                 "type": "RELAY",
                 "sender": self_id,
@@ -192,6 +193,7 @@ def relay_or_direct_send(self_id, dst_id, message):
             }
             return send_message(relay_peer[1], relay_peer[2], relay_msg)
         else:
+            print(f"🟡 No relay peer found for {dst_id}")
             return False
     # If the target peer is non-NATed, send the message to the target peer using the function `send_message`.
     else:
@@ -207,9 +209,8 @@ def get_relay_peer(self_id, dst_id):
     relay_candidates = reachable_by.get(dst_id, set())
     best_peer = None
     for relay_id in relay_candidates:
-        if relay_id != self_id:
-            if best_peer is None or rtt_tracker[relay_id] < rtt_tracker[best_peer[0]]:
-                best_peer = (relay_id, known_peers[relay_id][0], known_peers[relay_id][1])
+        if best_peer is None or rtt_tracker[relay_id] < rtt_tracker[best_peer[0]]:
+            best_peer = (relay_id, known_peers[relay_id][0], known_peers[relay_id][1])
     return best_peer  # (peer_id, ip, port) or None
 
 # wrapper for send_message，模拟真实网络状况
@@ -243,7 +244,6 @@ def send_message(ip, port, message):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((ip, port))
         sock.sendall((json.dumps(message) + "\n").encode())
-        #print(f"Sent message to {ip}:{port}: {message}")
         sock.close()
         return True
     except Exception as e:

@@ -256,6 +256,7 @@ def dispatch_message(msg, self_id, self_ip):
 
     #format in block_handler.request_block_sync
     elif msg_type == "GET_BLOCK_HEADERS":
+        from utils import generate_message_id
         
         # Read all block header in the local blockchain and store them in `headers`.
         headers = []
@@ -272,7 +273,8 @@ def dispatch_message(msg, self_id, self_ip):
         block_headers_msg = {
             "type": "BLOCK_HEADERS",
             "sender": self_id,
-            "headers": headers
+            "headers": headers,
+            "message_id": generate_message_id()
         }
 
         # Send the `BLOCK_HEADERS` message to the requester using the function `enqueue_message` in `outbox.py`.

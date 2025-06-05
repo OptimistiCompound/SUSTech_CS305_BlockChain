@@ -25,7 +25,7 @@ def request_block_sync(self_id):
         if peer != self_id:
             enqueue_message(peer, known_peers[peer][0], known_peers[peer][1], msg)
 
-def block_generation(self_id, MALICIOUS_MODE, interval=20):
+def block_generation(self_id, MALICIOUS_MODE, interval=40):
     from inv_message import create_inv
     def mine():
         while True:

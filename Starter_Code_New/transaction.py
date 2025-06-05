@@ -48,7 +48,7 @@ class TransactionMessage:
 tx_pool = []
 tx_ids = set()
 
-def transaction_generation(self_id, interval=15):
+def transaction_generation(self_id, interval=60):
     def loop():
         while True:
             # 随机选择一个已知节点（排除自己）
