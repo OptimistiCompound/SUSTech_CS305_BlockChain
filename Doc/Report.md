@@ -623,41 +623,41 @@ elif msg_type == "PING":
 - 自动生成新的区块
 - 自动生成新的交易，交易被打包成区块后，自动清除
 - block池
-![full 节点的本地block池](image.png)
+![full 节点的本地block池](Media/image.png)
 - transactions池
-![full 节点本地transactions池](image-6.png)
+![full 节点本地transactions池](Media/image-6.png)
 - orphan池
-![full 节点的本地orphan池](image-8.png)
+![full 节点的本地orphan池](Media/image-8.png)
 
 #### 对于light节点，行为如下：
 - 不生成新的区块
 - 不生成新的交易
 - 只接收的区块头
 
-![light 节点的本地block header池](image-4.png)
+![light 节点的本地block header池](Media/image-4.png)
 
 #### 对于NAT节点，行为如下：
 - 无法与不同localnetworkid的peer直接交流，需要通过relay节点转发
 - 以下是5000节点的消息队列，5003是与其同一localnetworkid的NAT节点。5007和5005需要和5003通信，所以5000发给5003的消息出现了RELAY消息，payload是5007和5005发给5003的原始消息。
-![RELAY发送示例](image-1.png)
+![RELAY发送示例](Media/image-1.png)
 
 
 ### 其他参数
 
 - peers示例：
-![peers示例](image-7.png)
+![peers示例](Media/image-7.png)
 
 - latency示例：
-![latency示例](image-2.png)
+![latency示例](Media/image-2.png)
 
 - blacklist示例：
-![blacklist示例](image-3.png)
+![blacklist示例](Media/image-3.png)
 
 - capacity示例：
-![capacity示例](image-5.png)
+![capacity示例](Media/image-5.png)
 
 - redundancy示例
-![redundancy示例](image-9.png)
+![redundancy示例](Media/image-9.png)
 
 - drop_stats示例
-![drop_stats示例](image-10.png)
+![drop_stats示例](Media/image-10.png)
