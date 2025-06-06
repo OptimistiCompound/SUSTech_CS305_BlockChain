@@ -3,7 +3,8 @@
     "5000": {
       "ip": "172.28.0.10",
       "port": 5000,
-      "fanout":1,
+      "fanout":3,
+      "light": true,
       "localnetworkid":1
     },
     "5001": {
@@ -34,7 +35,7 @@
     "5005": {
       "ip": "172.28.0.15",
       "port": 5005,
-      "fanout":1
+      "fanout":3
     },
     "5006": {
       "ip": "172.28.0.16",
@@ -50,6 +51,24 @@
       "fanout":1,
       "nat": true,
       "localnetworkid":2
-    }
+    },
+     "5008": {
+       "ip": "172.28.0.18",
+       "port": 5008,
+       "fanout":1,
+       "light": true,
+       "localnetworkid":2
+     },
+     "5009": {
+       "ip": "172.28.0.19",
+       "port": 5009,
+       "fanout":3,
+       "localnetworkid":2
+     },
+     "5010": {
+       "ip": "172.28.0.20",
+       "port": 5010,
+       "fanout":3
+     }
   }
 }
