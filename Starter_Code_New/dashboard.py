@@ -6,15 +6,19 @@ from transaction import get_recent_transactions
 from message_handler import get_redundancy_stats
 from peer_discovery import known_peers, peer_config, peer_flags
 import json
-from block_handler import received_blocks, orphan_blocks
+from block_handler import received_blocks, orphan_blocks, header_store
 from outbox import queues
 
 app = Flask(__name__)
 blockchain_data_ref = None
 known_peers_ref = None
 
+self_id = None
+
 def start_dashboard(peer_id, port):
     global blockchain_data_ref, known_peers_ref
+    global self_id
+    self_id = peer_id
     blockchain_data_ref = received_blocks
     known_peers_ref = known_peers
     def run():
@@ -28,6 +32,8 @@ def home():
 @app.route('/blocks')
 def blocks():
     # 展示本地区块链（received_blocks）
+    if peer_config[self_id].get("light", False):
+        return jsonify(header_store)
     return jsonify(received_blocks)
 
 @app.route('/peers')
@@ -61,8 +67,9 @@ def latency():
     return jsonify(rtt_tracker)
 
 @app.route('/capacity')
-def capacity():
-    pass
+def view_capacity():
+    from outbox import rate_limiter
+    return jsonify(rate_limiter.capacity)
 
 @app.route('/orphans')
 def view_orphan_blocks():
