@@ -55,7 +55,8 @@ services:
     ports:
       - "6004:5004"    
       - "8004:7004"    
-    command: ["python", "node.py", "--id", "5004", "--config", "config.json", "--mode", "malicious"]
+    # command: ["python", "node.py", "--id", "5004", "--config", "config.json", "--mode", "malicious"]
+    command: ["python", "node.py", "--id", "5004", "--config", "config.json"]
     networks:
       p2pnet:
         ipv4_address: 172.28.0.14
@@ -96,42 +97,42 @@ services:
       p2pnet:
         ipv4_address: 172.28.0.17
 
-  peer5008:
-    build: .
-    container_name: peer5008
-    hostname: peer5008
-    ports:
-      - "6008:5008"    
-      - "8008:7008"    
-    command: ["python", "node.py", "--id", "5008", "--config", "config.json"]
-    networks:
-      p2pnet:
-        ipv4_address: 172.28.0.18
+  # peer5008:
+  #   build: .
+  #   container_name: peer5008
+  #   hostname: peer5008
+  #   ports:
+  #     - "6008:5008"    
+  #     - "8008:7008"    
+  #   command: ["python", "node.py", "--id", "5008", "--config", "config.json"]
+  #   networks:
+  #     p2pnet:
+  #       ipv4_address: 172.28.0.18
 
-  peer5009:
-    build: .
-    container_name: peer5009
-    hostname: peer5009
-    ports:
-      - "6009:5009"    
-      - "8009:7009"    
-    command: ["python", "node.py", "--id", "5009", "--config", "config.json"]
-    networks:
-      p2pnet:
-        ipv4_address: 172.28.0.19
+  # peer5009:
+  #   build: .
+  #   container_name: peer5009
+  #   hostname: peer5009
+  #   ports:
+  #     - "6009:5009"    
+  #     - "8009:7009"    
+  #   command: ["python", "node.py", "--id", "5009", "--config", "config.json"]
+  #   networks:
+  #     p2pnet:
+  #       ipv4_address: 172.28.0.19
 
 
-  peer5010:
-    build: .
-    container_name: peer5010
-    hostname: peer5010
-    ports:
-      - "6010:5010"    
-      - "8010:7010"    
-    command: ["python", "node.py", "--id", "5010", "--config", "config.json"]
-    networks:
-      p2pnet:
-        ipv4_address: 172.28.0.20
+  # peer5010:
+  #   build: .
+  #   container_name: peer5010
+  #   hostname: peer5010
+  #   ports:
+  #     - "6010:5010"    
+  #     - "8010:7010"    
+  #   command: ["python", "node.py", "--id", "5010", "--config", "config.json"]
+  #   networks:
+  #     p2pnet:
+  #       ipv4_address: 172.28.0.20
 
 networks:
   p2pnet:

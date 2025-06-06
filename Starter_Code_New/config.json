@@ -50,24 +50,6 @@
       "fanout":1,
       "nat": true,
       "localnetworkid":2
-    },
-    "5008": {
-      "ip": "172.28.0.18",
-      "port": 5008,
-      "fanout":1,
-      "light": true,
-      "localnetworkid":2
-    },
-    "5009": {
-      "ip": "172.28.0.19",
-      "port": 5009,
-      "fanout":1,
-      "localnetworkid":2
-    },
-    "5010": {
-      "ip": "172.28.0.20",
-      "port": 5010,
-      "fanout":1
     }
   }
 }
