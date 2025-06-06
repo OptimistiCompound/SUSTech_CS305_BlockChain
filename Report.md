@@ -20,26 +20,43 @@
 - 若收到空消息或无效 JSON，会直接跳过或打印错误日志，保证服务稳定。
 
 ```python
+
+RECV_BUFFER = 4096
+
 def start_socket_server(self_id, self_ip, port):
+
     def listen_loop():
+        # Create a TCP socket and bind it to the peer’s IP address and port.
         peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        peer_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         peer_socket.bind((self_ip, port))
         peer_socket.listen()
         print(f"Listening on {self_ip}:{port}")
+        # When receiving messages, pass the messages to the function `dispatch_message` in `message_handler.py`.
         while True:
             try:
                 conn, addr = peer_socket.accept()
-                with conn:
-                    msg = conn.recv(RECV_BUFFER)
-                    if not msg:
-                        continue
+                conn.settimeout(10)  # 防止死等
+                with conn:  # 使用with确保连接正确关闭
                     try:
-                        msg_dict = json.loads(msg)
-                        dispatch_message(msg_dict, self_id, self_ip)
-                    except json.JSONDecodeError:
-                        print(f"从{addr}接收到无效JSON数据")
+                        # 用文件对象逐行读取
+                        f = conn.makefile()
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                msg_dict = json.loads(line)
+                                dispatch_message(msg_dict, self_id, self_ip)
+                            except json.JSONDecodeError:
+                                print(f"从{addr}接收到无效JSON数据: {line}")
+                    except Exception as e:
+                        print(f"❌ Error receiving message: {e} in peer {self_id} at {self_ip}:{port}")
             except Exception as e:
-                print(f"❌ Error receiving message: {e} in peer {self_id} at {self_ip}:{port}")
+                print(f"🔻 Error accepting connection: {e} in peer {self_id} at {self_ip}:{port}")
+                continue
+
+    # ✅ Run listener in background
     threading.Thread(target=listen_loop, daemon=True).start()
 ```
 
@@ -52,7 +69,7 @@ def start_socket_server(self_id, self_ip, port):
 - 通过两层循环，计算每个 peer 的 reachable_by 集合，表示哪些 peer 能到达该节点（考虑 NAT 和局域网约束）。
 - 非 NAT 节点可被所有节点到达。
 NAT 节点只能被同局域网的节点到达。
-创建 reachable_peer_list 全局一致。然后启动一个线程，每隔DISCOVERY_INTERVAL秒调用一次discover_peers。discover_peers会遍历reachable_peer_list，向每个peer发送 HELLO 消息，然后等待响应。收到响应后，会调用handle_discover_response处理响应:
+创建 reachable_peer_list, 全局一致。然后启动一个线程，每隔DISCOVERY_INTERVAL秒调用一次discover_peers。discover_peers会遍历reachable_peer_list，向每个peer发送 HELLO 消息，然后等待响应。收到响应后，会调用handle_discover_response处理响应:
 - 如果 sender 不在 known_peer 中, 会将该节点加入到该节点的 known_peer 中。
 - 如果 sender 不再 reachable_by[self_id] 中，会将该节点加入到 reachable_by[self_id] 中。
 
@@ -173,6 +190,27 @@ def block_generation(self_id, MALICIOUS_MODE, interval=20):
             time.sleep(interval)
     threading.Thread(target=mine, daemon=True).start()
 ```
+
+对于新生成的block，通过`outbox.py` 中的 `gossip_message`函数，将block广播给已知节点。
+
+```python
+def gossip_message(self_id, message, fanout=3):
+
+    from peer_discovery import known_peers, peer_config, peer_flags
+    selected_peers = set()
+    for peer in peer_config:
+        if peer == self_id:
+            continue
+        light = peer_flags[peer].get("light", False)
+        if light and message["type"] == "TX":
+            continue
+        selected_peers.add(peer)
+        if len(selected_peers) == fanout:
+            break
+    for peer in selected_peers:
+        enqueue_message(peer, known_peers[peer][0], known_peers[peer][1], message)
+```
+
 ```python
 def handle_block(msg, self_id):
     block_id = msg.get("block_id")
@@ -285,13 +323,274 @@ def broadcast_inventory(self_id):
 发送消息的时候按照优先级发送,当优先级高的消息没有发送完的时候,会先发送优先级高的消息,当优先级高的消息发送完了,才发送优先级低的消息。
 如果发送目的节点不可达,是nat节点,会将消息发送发给对应的relay节点,然后通过relay节点的消息队列forwarding给最终的nat节点。
 
-此外，还通过 `RateLimiter` 类来模拟真实网络的发送速率限制。
+其他文件通过调用 `enqueue_message` 函数，将消息加入到消息队列中，而具体的发送逻辑在`outbox.py`中实现。
+```python
+def enqueue_message(target_id, ip, port, message):
+    from peer_manager import blacklist, rtt_tracker
 
+    # Check if the peer sends message to the receiver too frequently using the function `is_rate_limited`. If yes, drop the message.
+    # Check if the receiver exists in the `blacklist`. If yes, drop the message.
+    # Classify the priority of the sending messages based on the message type using the function `classify_priority`.
+    # Add the message to the queue (`queues`) if the length of the queue is within the limit `QUEUE_LIMIT`, or otherwise, drop the message.
+    if is_rate_limited(target_id):
+        return
+    if target_id in blacklist:
+        return
+    priority = classify_priority(message)
+
+    if message["type"] == "HELLO":
+        print(f"🟢 Hello from {target_id}")
+
+    with lock:
+        if len(queues[target_id][priority]) < QUEUE_LIMIT:
+            queues[target_id][priority].append((ip, port, message))
+        else:
+            print(f"[{target_id}]🈲 Drop due to queue limit")
+            drop_stats[message["type"]] += 1
+            return
+```
+
+具体的发送逻辑在`send_from_queue`中实现。`enqueue_message`函数会根据消息的优先级和目的节点的状态，决定是否立即发送或稍后发送。然后调用`relay_or_direct_send`函数来决定是直接发送还是通过relay节点发送。如果能够直达，直接调用`send_message`函数发送消息；如果目标是NATed peer，且自身无法直达，则通过`get_relay_peer`获取latency最低的relay节点，将原始消息封装在RELAY消息的payload里面，调用`send_message`函数发送消息。重传机制使用简单的重复发送，最多重传 3 次。如果 3 次发送都失败，则记录为丢弃。
+
+```python
+def send_from_queue(self_id):
+    def worker():
+        while True:  # 持续轮询
+            for target_id in list(queues.keys()):
+                with lock:
+                    if (queues[target_id]["HIGH"] or queues[target_id]["MEDIUM"] or queues[target_id]["LOW"]):
+                        ip, port, message = None, None, None
+                        if queues[target_id]["HIGH"]:
+                            ip, port, message = queues[target_id]["HIGH"].popleft()
+                        elif queues[target_id]["MEDIUM"]:
+                            ip, port, message = queues[target_id]["MEDIUM"].popleft()
+                        elif queues[target_id]["LOW"]:
+                            ip, port, message = queues[target_id]["LOW"].popleft()
+                        else:
+                            continue
+                        retries[target_id] = 0
+                    else:
+                        continue
+                
+                success = relay_or_direct_send(self_id, target_id, message)
+
+                # Retry a message if it is sent unsuccessfully and drop the message if the retry times exceed the limit `MAX_RETRIES`.
+                if not success:
+                    if retries[target_id] < MAX_RETRIES:
+                        retries[target_id] += 1
+                        print(f"Retrying: {retries[target_id]}/3")
+                        time.sleep(RETRY_INTERVAL)
+                        enqueue_message(target_id, ip, port, message)
+                    else:
+                        drop_stats[message["type"]] += 1
+                        retries[target_id] = 0
+                else:
+                    retries[target_id] = 0
+            time.sleep(0.01)  # 防止空转占用CPU
+
+    threading.Thread(target=worker, daemon=True).start()
+
+def relay_or_direct_send(self_id, dst_id, message):
+    from peer_discovery import known_peers, peer_flags, reachable_by
+    from utils import generate_message_id
+
+    if message["type"] == "HELLO":
+        print(f"🟢 Sending HELLO to {dst_id}")
+
+    # Check if the target peer is NATed. 
+    nat = peer_flags.get(dst_id, {}).get("nat", False)
+
+    if self_id in reachable_by[dst_id]:
+        return send_message(known_peers[dst_id][0], known_peers[dst_id][1], message)
+    if nat:
+        relay_peer = get_relay_peer(self_id, dst_id) # (peer_id, ip, port) or None
+        if relay_peer:
+            relay_msg = {
+                "type": "RELAY",
+                "sender": self_id,
+                "target": dst_id,
+                "payload": message,
+                "message_id": generate_message_id()
+            }
+            return send_message(relay_peer[1], relay_peer[2], relay_msg)
+        else:
+            print(f"🟡 No relay peer found for {dst_id}")
+            return False
+    else:
+        return send_message(known_peers[dst_id][0], known_peers[dst_id][1], message)
+```
+
+
+此外，还通过 `RateLimiter` 类来模拟真实网络的发送速率限制,并使用`apply_network_conditions`函数来应用网络条件。
+
+```python
+# === Sending Rate Limiter ===
+class RateLimiter:
+    def __init__(self, rate=SEND_RATE_LIMIT):
+        self.capacity = rate               # Max burst size
+        self.tokens = rate                # Start full
+        self.refill_rate = rate           # Tokens added per second
+        self.last_check = time.time()
+        self.lock = Lock()
+
+    def allow(self):
+        with self.lock:
+            now = time.time()
+            elapsed = now - self.last_check
+            self.tokens += elapsed * self.refill_rate
+            self.tokens = min(self.tokens, self.capacity)
+            self.last_check = now
+
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return True
+            return False
+
+rate_limiter = RateLimiter()
+
+def apply_network_conditions(send_func):
+    def wrapper(ip, port, message):
+
+        # Use the function `rate_limiter.allow` to check if the peer's sending rate is out of limit. 
+        # If yes, drop the message and update the drop states (`drop_stats`).
+        if rate_limiter.allow() == False:
+            drop_stats[message["type"]] += 1
+            return False
+
+        # Generate a random number. If it is smaller than `DROP_PROB`, drop the message to simulate the random message drop in the channel. 
+        # Update the drop states (`drop_stats`).
+        if random.random() < DROP_PROB:
+            drop_stats[message["type"]] += 1
+            return False
+
+        # Add a random latency before sending the message to simulate message transmission delay.
+        # Send the message using the function `send_func`.
+        time.sleep(random.uniform(*LATENCY_MS) / 1000)
+        return send_func(ip, port, message)
+```
 
 ## PART 5: Receiving Message Processing (message_handler.py)
 
 处理消息接受。主要通过`dispatch_message`方法，按照message的type来分类处理。
-此外，通过维护 seen_message_ids，seen_txs，redundant_blocks，redundant_txs，message_redundancy，处理重复接受的消息。并且通过`is_inbound_limited`方法，限制消息接收的速度
+此外，通过维护 seen_message_ids，seen_txs，redundant_blocks，redundant_txs，message_redundancy，处理重复接受的消息。并且通过`is_inbound_limited`方法，限制消息接收的速度。
+
+以下介绍`dispatch_message`的行为
+
+处理PING和PONG，来更新节点是否存活。
+```python
+elif msg_type == "PING":
+        update_peer_heartbeat(msg["sender"])
+        pong_msg = create_pong(self_id, msg["timestamp"])
+        target_ip, target_port = known_peers[msg["sender"]]
+        enqueue_message(msg["sender"], target_ip, target_port, pong_msg)
+
+    elif msg_type == "PONG":
+        update_peer_heartbeat(msg["sender"])
+        update_peer_heartbeat(self_id)
+        handle_pong(msg)
+```
+
+处理INV消息，如果收到的消息的block_id不在本地的block_id列表中，就会向发送者发送getblock消息，请求缺失的block。
+```python
+    elif msg_type == "INV":
+        local_block_ids = get_inventory() # list of block_id
+        rcv_block_ids = msg.get("block_ids", [])
+        missing_block_ids = [block_id for block_id in rcv_block_ids if block_id not in local_block_ids]
+        if missing_block_ids:
+            getblock_msg = create_getblock(self_id, missing_block_ids)
+            target_ip, target_port = known_peers[msg["sender"]]
+            enqueue_message(msg["sender"], target_ip, target_port, getblock_msg)
+```
+
+处理GETBLOCK消息，如果收到的消息的block_id在本地的block_id列表中，就会向发送者发送block消息；否则向已知的peers请求缺失的block。
+```python
+    elif msg_type == "GETBLOCK":
+        print(f"[{self_id}] Received GETBLOCK from {msg['sender']}, requesting blocks: {msg.get('block_ids', [])}")
+
+        rcv_block_ids = msg.get("block_ids", [])
+        ret_blocks = []
+        missing_block_ids = []
+
+        # 1. 查找本地已有的区块
+        for block_id in rcv_block_ids:
+            block = get_block_by_id(block_id)
+            if block:
+                ret_blocks.append(block)
+                print(f"{self_id} Found block: {block_id}")
+            else:
+                missing_block_ids.append(block_id)
+                print(f"[{self_id}] Missing block: {block_id}")
+
+        # 2. 发送本地已有区块
+        for block in ret_blocks:
+            try:
+                # 检查序列化
+                json.dumps(block)
+            except Exception as e:
+                print(f"[{self_id}] Block not serializable: {e}, block={block}")
+                continue
+            print(f"Sending BLOCK: {block['block_id']}")
+
+            try:
+                sender = msg["sender"]
+            except Exception as e:
+                print(f"🆘 Exception in Key")
+            try:
+                print(f"enqueue_message参数: sender={msg.get('sender')}, peer_config={peer_config.get(msg.get('sender'))}")
+                enqueue_message(
+                    sender,
+                    peer_config.get(sender)["ip"],
+                    peer_config.get(sender)["port"],
+                    block
+                )
+            except Exception as e:
+                print(f"🆘 Error calling enqueue_message: {e}, msg={msg}, peer_config_keys={list(peer_config.keys())}")
+            
+
+        # 3. 如果有缺失区块，向其他 peer 请求
+        if missing_block_ids:
+            for peer_id in known_peers:
+                if peer_id == self_id:
+                    continue
+                get_block_msg = create_getblock(self_id, missing_block_ids)
+                enqueue_message(peer_id, peer_config[peer_id]["ip"], peer_config[peer_id]["port"], get_block_msg)
+
+            # 4. 最多重试3次，每次等待10秒
+            retry_cnt = 0
+            while missing_block_ids and retry_cnt < 3:
+                retry_cnt += 1
+                print(f"[{self_id}] get block retry {retry_cnt} times, missing: {missing_block_ids}")
+                time.sleep(10)
+                found_block_ids = []
+                for block_id in missing_block_ids:
+                    block = get_block_by_id(block_id)
+                    if block:
+                        try:
+                            json.dumps(block)
+                        except Exception as e:
+                            print(f"[{self_id}] Block not serializable: {e}, block={block}")
+                            continue
+                        print(f"Sending BLOCK: {block['block_id']}")
+                        enqueue_message(
+                            msg["sender"],
+                            peer_config[msg["sender"]]["ip"],
+                            peer_config[msg["sender"]]["port"],
+                            block
+                        )
+                        found_block_ids.append(block_id)
+                # 移除已找到的区块
+                for block_id in found_block_ids:
+                    missing_block_ids.remove(block_id)
+                # 继续向其他 peer 请求剩余的
+                if missing_block_ids:
+                    for peer_id in known_peers:
+                        if peer_id == self_id:
+                            continue
+                        get_block_msg = create_getblock(self_id, missing_block_ids)
+                        enqueue_message(peer_id, peer_config[peer_id]["ip"], peer_config[peer_id]["port"], get_block_msg)
+```
+
+其他方法主要调用其他文件中的方法，不再赘述。
 
 
 ## Part 6: Dashboard 可视化面板 (`dashboard.py`)
@@ -319,3 +618,46 @@ def broadcast_inventory(self_id):
 1. 使用 `docker compose up --build` 启动所有节点，每个节点运行在独立容器内。
 2. 节点自动完成初始化、发现、消息收发、区块与交易生成。
 3. 通过访问各节点 `localhost:port` 下不同接口，观察区块链、交易池、队列、节点状态等实时数据。
+
+#### 对于full节点，行为如下：
+- 自动生成新的区块
+- 自动生成新的交易，交易被打包成区块后，自动清除
+- block池
+![full 节点的本地block池](image.png)
+- transactions池
+![full 节点本地transactions池](image-6.png)
+- orphan池
+![full 节点的本地orphan池](image-8.png)
+
+#### 对于light节点，行为如下：
+- 不生成新的区块
+- 不生成新的交易
+- 只接收的区块头
+
+![light 节点的本地block header池](image-4.png)
+
+#### 对于NAT节点，行为如下：
+- 无法与不同localnetworkid的peer直接交流，需要通过relay节点转发
+- 以下是5000节点的消息队列，5003是与其同一localnetworkid的NAT节点。5007和5005需要和5003通信，所以5000发给5003的消息出现了RELAY消息，payload是5007和5005发给5003的原始消息。
+![RELAY发送示例](image-1.png)
+
+
+### 其他参数
+
+- peers示例：
+![peers示例](image-7.png)
+
+- latency示例：
+![latency示例](image-2.png)
+
+- blacklist示例：
+![blacklist示例](image-3.png)
+
+- capacity示例：
+![capacity示例](image-5.png)
+
+- redundancy示例
+![redundancy示例](image-9.png)
+
+- drop_stats示例
+![drop_stats示例](image-10.png)

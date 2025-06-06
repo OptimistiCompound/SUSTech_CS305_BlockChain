@@ -14,8 +14,12 @@ blockchain_data_ref = None
 known_peers_ref = None
 current_peer_id = None
 
+self_id = None
+
 def start_dashboard(peer_id, port):
     global blockchain_data_ref, known_peers_ref
+    global self_id
+    self_id = peer_id
     blockchain_data_ref = received_blocks
     known_peers_ref = known_peers
     global current_peer_id
@@ -30,17 +34,10 @@ def home():
 
 @app.route('/blocks')
 def blocks():
-    # 判断本节点是否为 light 节点
-    if current_peer_id and current_peer_id in peer_config:
-        is_light = peer_config[current_peer_id].get("light", False)
-    else:
-        is_light = False
-    if is_light:
-        # 展示本地区块链（received_blocks）
+    # 展示本地区块链（received_blocks）
+    if peer_config[self_id].get("light", False):
         return jsonify(header_store)
-    else:
-        # 如果是 light 节点，则只展示区块头 header_store
-        return jsonify(received_blocks)
+    return jsonify(received_blocks)
 
 @app.route('/peers')
 def peers():
@@ -73,8 +70,9 @@ def latency():
     return jsonify(rtt_tracker)
 
 @app.route('/capacity')
-def capacity():
-    pass
+def view_capacity():
+    from outbox import rate_limiter
+    return jsonify(rate_limiter.capacity)
 
 @app.route('/orphans')
 def view_orphan_blocks():
