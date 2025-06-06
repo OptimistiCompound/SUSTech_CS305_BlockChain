@@ -300,7 +300,7 @@ def broadcast_inventory(self_id):
 
 主要功能接口如下：
 
-- `/`：首页，展示项目基本信息。
+- `/`：首页，展示标题。
 - `/blocks`：展示本节点已接收的区块链内容（`received_blocks`）。
 - `/peers`：展示所有已知节点的详细信息，包括 NAT/Light 节点标记、状态等。
 - `/transactions`：展示本地交易池当前所有交易。

@@ -159,13 +159,24 @@ def dispatch_message(msg, self_id, self_ip):
         # Compare the local block IDs with those in the message.
         # If there are missing blocks, create a `GETBLOCK` message to request the missing blocks from the sender.
         # Send the `GETBLOCK` message to the sender using the function `enqueue_message` in `outbox.py`.
+        self_light = peer_flags[self_id]["light"]
         local_block_ids = get_inventory() # list of block_id
+        if self_light:
+            local_block_ids = [header["block_id"] for header in header_store]  # 轻节点只需要区块头
         rcv_block_ids = msg.get("block_ids", [])
         missing_block_ids = [block_id for block_id in rcv_block_ids if block_id not in local_block_ids]
         if missing_block_ids:
-            getblock_msg = create_getblock(self_id, missing_block_ids)
             target_ip, target_port = known_peers[msg["sender"]]
-            enqueue_message(msg["sender"], target_ip, target_port, getblock_msg)
+            if self_light:
+                get_header_msg = {
+                    "type": "GET_BLOCK_HEADERS",
+                    "sender": self_id,
+                    "message_id": generate_message_id(),
+                }
+                enqueue_message(msg["sender"], target_ip, target_port, get_header_msg)
+            else:
+                getblock_msg = create_getblock(self_id, missing_block_ids)
+                enqueue_message(msg["sender"], target_ip, target_port, getblock_msg)
 
     #format in block_handler.create_getblock
     elif msg_type == "GETBLOCK":

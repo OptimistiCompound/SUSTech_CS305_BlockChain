@@ -6,17 +6,20 @@ from transaction import get_recent_transactions
 from message_handler import get_redundancy_stats
 from peer_discovery import known_peers, peer_config, peer_flags
 import json
-from block_handler import received_blocks, orphan_blocks
+from block_handler import received_blocks, orphan_blocks, header_store
 from outbox import queues
 
 app = Flask(__name__)
 blockchain_data_ref = None
 known_peers_ref = None
+current_peer_id = None
 
 def start_dashboard(peer_id, port):
     global blockchain_data_ref, known_peers_ref
     blockchain_data_ref = received_blocks
     known_peers_ref = known_peers
+    global current_peer_id
+    current_peer_id = peer_id
     def run():
         app.run(host="0.0.0.0", port=port)
     Thread(target=run, daemon=True).start()
@@ -27,8 +30,17 @@ def home():
 
 @app.route('/blocks')
 def blocks():
-    # 展示本地区块链（received_blocks）
-    return jsonify(received_blocks)
+    # 判断本节点是否为 light 节点
+    if current_peer_id and current_peer_id in peer_config:
+        is_light = peer_config[current_peer_id].get("light", False)
+    else:
+        is_light = False
+    if is_light:
+        # 展示本地区块链（received_blocks）
+        return jsonify(header_store)
+    else:
+        # 如果是 light 节点，则只展示区块头 header_store
+        return jsonify(received_blocks)
 
 @app.route('/peers')
 def peers():
